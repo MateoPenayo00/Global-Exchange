@@ -1,0 +1,15 @@
+{% extends 'core/base.html' %}
+{% block title %}Exchange Pro | Home{% endblock %}
+{% block content %}
+  <div class="card">
+    <h1>Fast and transparent currency exchange</h1>
+    <p>Exchange Pro is a fictional business platform for secure account access and future international money services.</p>
+    {% if user.is_authenticated %}
+      <p>You are logged in as <strong>{{ user.username }}</strong>.</p>
+      <a class="btn btn-primary" href="/dashboard/">Go to dashboard</a>
+    {% else %}
+      <a class="btn btn-primary" href="/login/">Login</a>
+      <a class="btn btn-secondary" href="/register/">Create account</a>
+    {% endif %}
+  </div>
+{% endblock %}
