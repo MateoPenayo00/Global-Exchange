@@ -1,0 +1,12 @@
+{% extends 'core/base.html' %}
+{% block title %}Exchange Pro | Account{% endblock %}
+{% block content %}
+  <div class="card">
+    <h1>Account</h1>
+    <p><strong>Username:</strong> {{ user.username }}</p>
+    <p><strong>Email:</strong> {{ user.email|default:'Not available yet' }}</p>
+    <p class="danger">Deleting your account will remove your access permanently.</p>
+    <a class="btn btn-secondary" href="/dashboard/">Back to dashboard</a>
+    <a class="btn btn-primary" href="/delete-account/">Delete account</a>
+  </div>
+{% endblock %}
