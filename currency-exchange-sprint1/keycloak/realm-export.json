@@ -19,13 +19,31 @@
       "serviceAccountsEnabled": false,
       "protocol": "openid-connect",
       "redirectUris": [
+        "http://192.168.100.13/oidc/*",
         "http://localhost/oidc/*"
       ],
       "webOrigins": [
+        "http://192.168.100.13",
         "http://localhost"
       ],
       "attributes": {
-        "post.logout.redirect.uris": "http://localhost/"
+        "post.logout.redirect.uris": "http://192.168.100.13/,http://localhost/"
+      }
+    },
+    {
+      "clientId": "exchange-admin-api",
+      "name": "Exchange Pro Admin API",
+      "enabled": true,
+      "publicClient": false,
+      "secret": "change-me-admin",
+      "standardFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": true,
+      "protocol": "openid-connect",
+      "redirectUris": [],
+      "webOrigins": [],
+      "attributes": {
+        "access.token.lifespan": "300"
       }
     }
   ],
@@ -57,6 +75,19 @@
         }
       ],
       "realmRoles": ["customer"]
+    },
+    {
+      "username": "service-account-exchange-admin-api",
+      "enabled": true,
+      "emailVerified": false,
+      "serviceAccountClientId": "exchange-admin-api",
+      "clientRoles": {
+        "realm-management": [
+          "manage-users",
+          "view-users",
+          "query-users"
+        ]
+      }
     }
   ]
 }

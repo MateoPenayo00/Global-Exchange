@@ -15,7 +15,7 @@ INSTALLED_APPS = [
     "django.contrib.sessions",
     "django.contrib.messages",
     "django.contrib.staticfiles",
-    "core",
+    "core.apps.CoreConfig",
 ]
 
 MIDDLEWARE = [
@@ -76,25 +76,33 @@ STATIC_ROOT = BASE_DIR / "staticfiles"
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
-SITE_URL = os.getenv("SITE_URL", "http://localhost")
+SITE_URL = os.getenv("SITE_URL", "http://localhost").rstrip("/")
 LOGIN_REDIRECT_URL = os.getenv("LOGIN_REDIRECT_URL", "/dashboard/")
 LOGOUT_REDIRECT_URL = os.getenv("LOGOUT_REDIRECT_URL", "/")
 
-OIDC_RP_CLIENT_ID = os.getenv("KEYCLOAK_CLIENT_ID", "exchange-web")
-OIDC_RP_CLIENT_SECRET = os.getenv("KEYCLOAK_CLIENT_SECRET", "change-me")
-OIDC_OP_SERVER_URL = os.getenv("KEYCLOAK_SERVER_URL", "http://keycloak:8080/").rstrip("/")
-OIDC_REALM = os.getenv("KEYCLOAK_REALM", "exchange-learning")
-OIDC_OP_AUTHORIZATION_ENDPOINT = f"{OIDC_OP_SERVER_URL}/realms/{OIDC_REALM}/protocol/openid-connect/auth"
-OIDC_OP_TOKEN_ENDPOINT = f"{OIDC_OP_SERVER_URL}/realms/{OIDC_REALM}/protocol/openid-connect/token"
-OIDC_OP_USER_ENDPOINT = f"{OIDC_OP_SERVER_URL}/realms/{OIDC_REALM}/protocol/openid-connect/userinfo"
-OIDC_OP_JWKS_ENDPOINT = f"{OIDC_OP_SERVER_URL}/realms/{OIDC_REALM}/protocol/openid-connect/certs"
-OIDC_OP_LOGOUT_ENDPOINT = f"{OIDC_OP_SERVER_URL}/realms/{OIDC_REALM}/protocol/openid-connect/logout"
+KEYCLOAK_PUBLIC_URL = os.getenv("KEYCLOAK_PUBLIC_URL", SITE_URL).rstrip("/")
+KEYCLOAK_INTERNAL_URL = os.getenv("KEYCLOAK_INTERNAL_URL", "http://keycloak:8080").rstrip("/")
+KEYCLOAK_REALM = os.getenv("KEYCLOAK_REALM", "exchange-learning")
+KEYCLOAK_CLIENT_ID = os.getenv("KEYCLOAK_CLIENT_ID", "exchange-web")
+KEYCLOAK_CLIENT_SECRET = os.getenv("KEYCLOAK_CLIENT_SECRET", "change-me")
+KEYCLOAK_ADMIN_CLIENT_ID = os.getenv("KEYCLOAK_ADMIN_CLIENT_ID", "exchange-admin-api")
+KEYCLOAK_ADMIN_CLIENT_SECRET = os.getenv("KEYCLOAK_ADMIN_CLIENT_SECRET", "change-me-admin")
+
+OIDC_RP_CLIENT_ID = KEYCLOAK_CLIENT_ID
+OIDC_RP_CLIENT_SECRET = KEYCLOAK_CLIENT_SECRET
 OIDC_RP_SIGN_ALGO = "RS256"
+OIDC_RP_SCOPES = "openid email profile"
 OIDC_CREATE_USER = True
-OIDC_AUTH_REQUEST_EXTRA_PARAMS = {"scope": "openid email profile"}
+OIDC_STORE_ID_TOKEN = True
+
+OIDC_OP_AUTHORIZATION_ENDPOINT = f"{KEYCLOAK_PUBLIC_URL}/realms/{KEYCLOAK_REALM}/protocol/openid-connect/auth"
+OIDC_OP_TOKEN_ENDPOINT = f"{KEYCLOAK_INTERNAL_URL}/realms/{KEYCLOAK_REALM}/protocol/openid-connect/token"
+OIDC_OP_USER_ENDPOINT = f"{KEYCLOAK_INTERNAL_URL}/realms/{KEYCLOAK_REALM}/protocol/openid-connect/userinfo"
+OIDC_OP_JWKS_ENDPOINT = f"{KEYCLOAK_INTERNAL_URL}/realms/{KEYCLOAK_REALM}/protocol/openid-connect/certs"
+OIDC_OP_LOGOUT_ENDPOINT = f"{KEYCLOAK_PUBLIC_URL}/realms/{KEYCLOAK_REALM}/protocol/openid-connect/logout"
 
 AUTHENTICATION_BACKENDS = [
-    "mozilla_django_oidc.auth.OIDCAuthenticationBackend",
+    "core.backends.KeycloakOIDCAuthenticationBackend",
     "django.contrib.auth.backends.ModelBackend",
 ]
 

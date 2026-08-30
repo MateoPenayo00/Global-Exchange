@@ -1,12 +1,25 @@
 {% extends 'core/base.html' %}
 {% block title %}Exchange Pro | Dashboard{% endblock %}
 {% block content %}
-  <div class="card">
-    <h1>Dashboard</h1>
-    <p>Welcome, <strong>{{ user.username }}</strong>.</p>
-    <p>Email: {{ user.email|default:'Not available yet' }}</p>
-    <p>This dashboard will later include exchange rates and transfer tools. For Sprint 1, it only confirms that user management works.</p>
-    <a class="btn btn-primary" href="/account/">Account page</a>
-    <a class="btn btn-secondary" href="/logout/">Logout</a>
+  <div class="card stack">
+    <div>
+      <h1>Dashboard</h1>
+      <p class="muted">This page confirms that your Keycloak-authenticated session is active.</p>
+    </div>
+
+    <div>
+      <p><strong>Username:</strong> {{ profile_name }}</p>
+      <p><strong>Email:</strong> {{ profile_email|default:'Not available yet' }}</p>
+      <p><strong>Session:</strong> authenticated through Keycloak</p>
+    </div>
+
+    <div>
+      <p>For Sprint 1 this page is intentionally simple. It acts as the first authenticated landing point and later can grow into a real exchange operations dashboard.</p>
+    </div>
+
+    <div>
+      <a class="btn btn-primary" href="/account/">Account settings</a>
+      <a class="btn btn-secondary" href="/logout/">Logout</a>
+    </div>
   </div>
 {% endblock %}

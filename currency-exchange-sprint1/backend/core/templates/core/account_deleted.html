@@ -1,0 +1,19 @@
+{% extends 'core/base.html' %}
+{% block title %}Exchange Pro | Account Deleted{% endblock %}
+{% block content %}
+  <div class="card stack">
+    <div>
+      <h1 class="success">Account deleted</h1>
+      <p>Your Keycloak account for <strong>{{ deleted_username }}</strong> has been removed.</p>
+    </div>
+
+    <div>
+      <p>The local Django session has also been cleared. If you sign in again, you will need to create a new account or log in with another valid Keycloak user.</p>
+    </div>
+
+    <div>
+      <a class="btn btn-primary" href="/">Return home</a>
+      <a class="btn btn-secondary" href="/register/">Create a new account</a>
+    </div>
+  </div>
+{% endblock %}
