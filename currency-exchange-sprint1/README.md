@@ -6,12 +6,15 @@ This project is a learning stack for a fictional currency exchange business.
 - Django app
 - Keycloak identity provider
 - PostgreSQL databases
-- Nginx reverse proxy
 - Docker Compose orchestration
 
-## Browser access
-- Main app: http://192.168.100.13
-- Keycloak: http://192.168.100.13:8080
+## Browser access via NPM
+- Main app: https://global-exchange.mateopenayo.dev
+- Keycloak: https://auth.global-exchange.mateopenayo.dev
+
+## Backend ports for NPM forwarding
+- Django app: 192.168.100.13:8000
+- Keycloak: 192.168.100.13:8080
 
 ## Basic startup
 1. Review `.env`
@@ -30,4 +33,5 @@ docker compose up -d --build
 ## Notes
 - `exchange-web` is the Django application container.
 - `exchange-admin-api` is a Keycloak confidential client used for account deletion.
+- The project is intended to sit behind Nginx Proxy Manager later, not a local nginx container.
 - Use `docker compose logs --tail=200 web` if the app restarts.

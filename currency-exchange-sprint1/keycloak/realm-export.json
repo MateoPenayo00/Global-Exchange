@@ -13,21 +13,19 @@
       "name": "Exchange Pro Web App",
       "enabled": true,
       "publicClient": false,
-      "secret": "WBs6lBL-hUn6cny_nsiWFygNvABtSrLDje9Rea6HwTE",
+      "secret": "change-me-web-secret",
       "standardFlowEnabled": true,
       "directAccessGrantsEnabled": false,
       "serviceAccountsEnabled": false,
       "protocol": "openid-connect",
       "redirectUris": [
-        "http://192.168.100.13/oidc/*",
-        "http://localhost/oidc/*"
+        "https://global-exchange.mateopenayo.dev/oidc/*"
       ],
       "webOrigins": [
-        "http://192.168.100.13",
-        "http://localhost"
+        "https://global-exchange.mateopenayo.dev"
       ],
       "attributes": {
-        "post.logout.redirect.uris": "http://192.168.100.13/,http://localhost/"
+        "post.logout.redirect.uris": "https://global-exchange.mateopenayo.dev/"
       }
     },
     {
@@ -35,7 +33,7 @@
       "name": "Exchange Pro Admin API",
       "enabled": true,
       "publicClient": false,
-      "secret": "mxGQlUTR3fUIQmzbUIc_f4keMBBn-838U_kM2y7_ZhE",
+      "secret": "change-me-admin-secret",
       "standardFlowEnabled": false,
       "directAccessGrantsEnabled": false,
       "serviceAccountsEnabled": true,
