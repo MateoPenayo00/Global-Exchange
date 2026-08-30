@@ -5,35 +5,57 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>{% block title %}Exchange Pro{% endblock %}</title>
     <style>
-      :root { --navy: #0b1f3a; --teal: #1f9d8f; --bg: #f6f8fb; --card: #ffffff; --text: #1f2937; }
+      :root { --navy: #0b1f3a; --teal: #1f9d8f; --bg: #f6f8fb; --card: #ffffff; --text: #1f2937; --danger: #b91c1c; --success: #047857; }
       body { margin: 0; font-family: Arial, sans-serif; background: var(--bg); color: var(--text); }
-      header { background: var(--navy); color: white; padding: 16px 24px; display: flex; justify-content: space-between; align-items: center; }
+      header { background: var(--navy); color: white; padding: 16px 24px; display: flex; justify-content: space-between; align-items: center; gap: 16px; flex-wrap: wrap; }
       a { color: var(--teal); text-decoration: none; }
+      a:hover { text-decoration: underline; }
       .container { max-width: 1100px; margin: 0 auto; padding: 24px; }
       .card { background: var(--card); border-radius: 12px; padding: 24px; box-shadow: 0 8px 24px rgba(0,0,0,0.06); }
-      .btn { display: inline-block; padding: 10px 16px; border-radius: 8px; margin-right: 8px; border: 0; cursor: pointer; }
+      .stack { display: grid; gap: 16px; }
+      .btn { display: inline-block; padding: 10px 16px; border-radius: 8px; margin-right: 8px; border: 0; cursor: pointer; font-size: 14px; }
       .btn-primary { background: var(--teal); color: white; }
       .btn-secondary { background: #e5e7eb; color: #111827; }
-      .danger { color: #b91c1c; }
+      .btn-danger { background: var(--danger); color: white; }
+      .muted { color: #6b7280; }
+      .danger { color: var(--danger); }
+      .success { color: var(--success); }
+      .messages { list-style: none; padding: 0; margin: 0 0 16px 0; display: grid; gap: 10px; }
+      .messages li { padding: 12px 14px; border-radius: 8px; background: #fff; border-left: 4px solid #cbd5e1; }
+      .messages li.success { border-left-color: var(--success); }
+      .messages li.error { border-left-color: var(--danger); }
+      .messages li.warning { border-left-color: #b45309; }
+      .field { display: grid; gap: 8px; margin-bottom: 16px; }
+      .field input { padding: 10px 12px; border: 1px solid #d1d5db; border-radius: 8px; font-size: 14px; width: 100%; max-width: 420px; }
+      .helptext { color: #6b7280; font-size: 13px; }
+      .errorlist { margin: 0; color: var(--danger); }
       footer { padding: 24px; text-align: center; color: #6b7280; }
+      .nav-actions { display: flex; gap: 12px; flex-wrap: wrap; }
     </style>
   </head>
   <body>
     <header>
       <div><strong>Exchange Pro</strong> — Global Currency Services</div>
-      <nav>
-        <a href="/">Home</a> |
+      <nav class="nav-actions">
+        <a href="/">Home</a>
         {% if user.is_authenticated %}
-          <a href="/dashboard/">Dashboard</a> |
-          <a href="/account/">Account</a> |
+          <a href="/dashboard/">Dashboard</a>
+          <a href="/account/">Account</a>
           <a href="/logout/">Logout</a>
         {% else %}
-          <a href="/login/">Login</a> |
+          <a href="/login/">Login</a>
           <a href="/register/">Register</a>
         {% endif %}
       </nav>
     </header>
     <div class="container">
+      {% if messages %}
+        <ul class="messages">
+          {% for message in messages %}
+            <li class="{{ message.tags }}">{{ message }}</li>
+          {% endfor %}
+        </ul>
+      {% endif %}
       {% block content %}{% endblock %}
     </div>
     <footer>Exchange Pro — secure currency exchange learning project</footer>
