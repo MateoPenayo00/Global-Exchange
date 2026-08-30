@@ -1,0 +1,91 @@
+{
+  "realm": "exchange-learning",
+  "enabled": true,
+  "registrationAllowed": true,
+  "rememberMe": true,
+  "loginWithEmailAllowed": true,
+  "duplicateEmailsAllowed": false,
+  "resetPasswordAllowed": true,
+  "verifyEmail": false,
+  "clients": [
+    {
+      "clientId": "exchange-web",
+      "name": "Exchange Pro Web App",
+      "enabled": true,
+      "publicClient": false,
+      "secret": "change-me-web-secret",
+      "standardFlowEnabled": true,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": false,
+      "protocol": "openid-connect",
+      "redirectUris": [
+        "https://global-exchange.mateopenayo.dev/oidc/*"
+      ],
+      "webOrigins": [
+        "https://global-exchange.mateopenayo.dev"
+      ],
+      "attributes": {
+        "post.logout.redirect.uris": "https://global-exchange.mateopenayo.dev/"
+      }
+    },
+    {
+      "clientId": "exchange-admin-api",
+      "name": "Exchange Pro Admin API",
+      "enabled": true,
+      "publicClient": false,
+      "secret": "change-me-admin-secret",
+      "standardFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": true,
+      "protocol": "openid-connect",
+      "redirectUris": [],
+      "webOrigins": [],
+      "attributes": {
+        "access.token.lifespan": "300"
+      }
+    }
+  ],
+  "roles": {
+    "realm": [
+      {
+        "name": "customer",
+        "description": "Standard customer role"
+      },
+      {
+        "name": "admin",
+        "description": "Administrative role"
+      }
+    ]
+  },
+  "users": [
+    {
+      "username": "demo.customer",
+      "enabled": true,
+      "emailVerified": true,
+      "firstName": "Demo",
+      "lastName": "Customer",
+      "email": "demo.customer@example.com",
+      "credentials": [
+        {
+          "type": "password",
+          "value": "ChangeMe123!",
+          "temporary": false
+        }
+      ],
+      "realmRoles": ["customer"]
+    },
+    {
+      "username": "service-account-exchange-admin-api",
+      "enabled": true,
+      "emailVerified": false,
+      "serviceAccountClientId": "exchange-admin-api",
+      "clientRoles": {
+        "realm-management": [
+          "manage-users",
+          "view-users",
+          "query-users"
+        ]
+      }
+    }
+  ]
+}

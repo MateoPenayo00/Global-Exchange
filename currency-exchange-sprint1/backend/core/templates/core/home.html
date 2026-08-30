@@ -1,0 +1,32 @@
+{% extends 'core/base.html' %}
+{% block title %}Exchange Pro | Home{% endblock %}
+{% block content %}
+  <div class="card stack">
+    <div>
+      <h1>Fast and transparent currency exchange</h1>
+      <p class="muted">Exchange Pro is a fictional business platform for secure account access and future international money services.</p>
+    </div>
+
+    <div>
+      <p>This Sprint 1 version focuses on identity and access control. The next stages can add exchange quotes, customer onboarding, and transfer workflows after authentication is stable.</p>
+      <ul>
+        <li>Browser login and registration are handled by Keycloak.</li>
+        <li>The Django app shows the landing page and user dashboard.</li>
+        <li>Account deletion is performed through a Keycloak admin API service account.</li>
+      </ul>
+    </div>
+
+    {% if user.is_authenticated %}
+      <p>You are logged in as <strong>{{ user.get_username }}</strong>.</p>
+      <div>
+        <a class="btn btn-primary" href="/dashboard/">Go to dashboard</a>
+        <a class="btn btn-secondary" href="/account/">Account page</a>
+      </div>
+    {% else %}
+      <div>
+        <a class="btn btn-primary" href="/login/">Login</a>
+        <a class="btn btn-secondary" href="/register/">Create account</a>
+      </div>
+    {% endif %}
+  </div>
+{% endblock %}

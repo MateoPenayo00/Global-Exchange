@@ -1,0 +1,25 @@
+{% extends 'core/base.html' %}
+{% block title %}Exchange Pro | Account{% endblock %}
+{% block content %}
+  <div class="card stack">
+    <div>
+      <h1>Account</h1>
+      <p class="muted">This account is managed by Keycloak, which is the identity system for the project.</p>
+    </div>
+
+    <div>
+      <p><strong>Display name:</strong> {{ profile_name }}</p>
+      <p><strong>Email:</strong> {{ profile_email|default:'Not available yet' }}</p>
+      <p><strong>Username:</strong> {{ user.get_username }}</p>
+    </div>
+
+    <div>
+      <p>You can return to the dashboard or proceed to the deletion flow. The deletion flow will remove the matching Keycloak user account using the admin API service account configured for this project.</p>
+    </div>
+
+    <div>
+      <a class="btn btn-primary" href="/dashboard/">Back to dashboard</a>
+      <a class="btn btn-danger" href="/delete-account/">Delete account</a>
+    </div>
+  </div>
+{% endblock %}
