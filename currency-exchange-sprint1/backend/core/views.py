@@ -77,7 +77,7 @@ def delete_account_view(request):
             else:
                 deleted_username = deleted_record.get("username") or request.user.get_username()
                 logout(request)
-                messages.success(request, f"Keycloak account {deleted_username} deleted successfully.")
+                messages.success(request, f"La cuenta de Keycloak {deleted_username} se ha eliminado correctamente.")
                 return render(
                     request,
                     "core/account_deleted.html",

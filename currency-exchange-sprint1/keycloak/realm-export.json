@@ -1,6 +1,12 @@
 {
   "realm": "exchange-learning",
   "enabled": true,
+  "internationalizationEnabled": true,
+  "supportedLocales": ["es"],
+  "defaultLocale": "es",
+  "loginTheme": "keycloak",
+  "accountTheme": "keycloak",
+  "adminTheme": "keycloak",
   "registrationAllowed": true,
   "rememberMe": true,
   "loginWithEmailAllowed": true,
@@ -18,14 +24,16 @@
       "directAccessGrantsEnabled": false,
       "serviceAccountsEnabled": false,
       "protocol": "openid-connect",
+      "rootUrl": "http://localhost",
+      "baseUrl": "/",
       "redirectUris": [
-        "https://global-exchange.mateopenayo.dev/oidc/*"
+        "http://localhost/oidc/*"
       ],
       "webOrigins": [
-        "https://global-exchange.mateopenayo.dev"
+        "http://localhost"
       ],
       "attributes": {
-        "post.logout.redirect.uris": "https://global-exchange.mateopenayo.dev/"
+        "post.logout.redirect.uris": "http://localhost/"
       }
     },
     {

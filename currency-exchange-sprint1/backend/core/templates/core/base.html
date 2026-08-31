@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="en">
+<html lang="es">
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -35,16 +35,16 @@
   </head>
   <body>
     <header>
-      <div><strong>Exchange Pro</strong> — Global Currency Services</div>
+      <div><strong>Exchange Pro</strong> — servicios globales de divisas</div>
       <nav class="nav-actions">
-        <a href="/">Home</a>
+        <a href="/">Inicio</a>
         {% if user.is_authenticated %}
-          <a href="/dashboard/">Dashboard</a>
-          <a href="/account/">Account</a>
-          <a href="/logout/">Logout</a>
+          <a href="/dashboard/">Panel</a>
+          <a href="/account/">Cuenta</a>
+          <a href="/logout/">Cerrar sesión</a>
         {% else %}
-          <a href="/login/">Login</a>
-          <a href="/register/">Register</a>
+          <a href="/login/">Iniciar sesión</a>
+          <a href="/register/">Registrarse</a>
         {% endif %}
       </nav>
     </header>
@@ -58,6 +58,6 @@
       {% endif %}
       {% block content %}{% endblock %}
     </div>
-    <footer>Exchange Pro — secure currency exchange learning project</footer>
+    <footer>Exchange Pro — proyecto de aprendizaje de cambio de divisas</footer>
   </body>
 </html>
