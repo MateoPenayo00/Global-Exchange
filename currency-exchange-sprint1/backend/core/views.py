@@ -54,11 +54,12 @@ def logout_view(request):
     if not id_token:
         return redirect(settings.LOGOUT_REDIRECT_URL)
 
-    logout_url = f"{settings.KEYCLOAK_PUBLIC_URL}/realms/{settings.KEYCLOAK_REALM}/protocol/openid-connect/logout"
+    base_url = f"{request.scheme}://{request.get_host()}"
+    logout_url = f"{base_url}/realms/{settings.KEYCLOAK_REALM}/protocol/openid-connect/logout"
     query = urlencode(
         {
             "id_token_hint": id_token,
-            "post_logout_redirect_uri": f"{settings.SITE_URL}{reverse('home')}",
+            "post_logout_redirect_uri": request.build_absolute_uri(reverse("home")),
         }
     )
     return redirect(f"{logout_url}?{query}")

@@ -6,13 +6,18 @@ This project is a local learning stack for a fictional currency exchange busines
 - Django app
 - Keycloak identity provider
 - PostgreSQL databases
-- Nginx reverse proxy for localhost access
+- Nginx reverse proxy for localhost and LAN IP access
 
 ## Local browser access
 - Main app: http://localhost
+- Main app over LAN IP: http://192.168.100.13
 - Django admin console: http://localhost/django-admin/
 - Keycloak admin console: http://localhost/admin/
-- Keycloak realm endpoints: http://localhost/realms/
+
+## Host behavior
+- The Django app accepts localhost and the LAN IP automatically.
+- The app also derives the current host from the request, so it can adapt without extra configuration.
+- Keycloak is configured to allow local host variations through the same proxy.
 
 ## Language
 - The Django UI is configured in Spanish.
@@ -34,7 +39,7 @@ docker compose up -d --build
 
 ## Notes
 - The Django app runs behind nginx.
-- Keycloak is proxied through nginx on the same localhost host.
+- Keycloak is proxied through nginx on the same machine.
 - The app and Keycloak are intended to stay local only.
 - Use `docker compose logs --tail=200 web` if the app restarts.
 - If you need to reset the databases, stop the stack and remove the Docker volumes.

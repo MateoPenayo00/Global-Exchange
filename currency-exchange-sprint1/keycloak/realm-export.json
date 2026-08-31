@@ -24,16 +24,20 @@
       "directAccessGrantsEnabled": false,
       "serviceAccountsEnabled": false,
       "protocol": "openid-connect",
-      "rootUrl": "http://localhost",
+      "rootUrl": "http://192.168.100.13",
       "baseUrl": "/",
       "redirectUris": [
-        "http://localhost/oidc/*"
+        "http://localhost/oidc/*",
+        "http://127.0.0.1/oidc/*",
+        "http://192.168.100.13/oidc/*"
       ],
       "webOrigins": [
-        "http://localhost"
+        "http://localhost",
+        "http://127.0.0.1",
+        "http://192.168.100.13"
       ],
       "attributes": {
-        "post.logout.redirect.uris": "http://localhost/"
+        "post.logout.redirect.uris": "http://localhost/|http://127.0.0.1/|http://192.168.100.13/"
       }
     },
     {
