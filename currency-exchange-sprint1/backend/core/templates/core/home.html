@@ -1,31 +1,31 @@
 {% extends 'core/base.html' %}
-{% block title %}Exchange Pro | Home{% endblock %}
+{% block title %}Exchange Pro | Inicio{% endblock %}
 {% block content %}
   <div class="card stack">
     <div>
-      <h1>Fast and transparent currency exchange</h1>
-      <p class="muted">Exchange Pro is a fictional business platform for secure account access and future international money services.</p>
+      <h1>Cambio de divisas rápido y transparente</h1>
+      <p class="muted">Exchange Pro es una plataforma ficticia para acceso seguro a cuentas y futuros servicios internacionales de dinero.</p>
     </div>
 
     <div>
-      <p>This Sprint 1 version focuses on identity and access control. The next stages can add exchange quotes, customer onboarding, and transfer workflows after authentication is stable.</p>
+      <p>Esta versión de Sprint 1 se centra en identidad y control de acceso. Las siguientes fases podrán añadir cotizaciones de cambio, alta de clientes y flujos de transferencias una vez que la autenticación esté estable.</p>
       <ul>
-        <li>Browser login and registration are handled by Keycloak.</li>
-        <li>The Django app shows the landing page and user dashboard.</li>
-        <li>Account deletion is performed through a Keycloak admin API service account.</li>
+        <li>El inicio de sesión y el registro en el navegador los gestiona Keycloak.</li>
+        <li>La aplicación Django muestra la página principal y el panel de usuario.</li>
+        <li>La eliminación de cuentas se realiza a través de una cuenta de servicio con acceso al admin API de Keycloak.</li>
       </ul>
     </div>
 
     {% if user.is_authenticated %}
-      <p>You are logged in as <strong>{{ user.get_username }}</strong>.</p>
+      <p>Has iniciado sesión como <strong>{{ user.get_username }}</strong>.</p>
       <div>
-        <a class="btn btn-primary" href="/dashboard/">Go to dashboard</a>
-        <a class="btn btn-secondary" href="/account/">Account page</a>
+        <a class="btn btn-primary" href="/dashboard/">Ir al panel</a>
+        <a class="btn btn-secondary" href="/account/">Página de cuenta</a>
       </div>
     {% else %}
       <div>
-        <a class="btn btn-primary" href="/login/">Login</a>
-        <a class="btn btn-secondary" href="/register/">Create account</a>
+        <a class="btn btn-primary" href="/login/">Iniciar sesión</a>
+        <a class="btn btn-secondary" href="/register/">Crear cuenta</a>
       </div>
     {% endif %}
   </div>

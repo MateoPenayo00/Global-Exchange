@@ -1,19 +1,19 @@
 {% extends 'core/base.html' %}
-{% block title %}Exchange Pro | Account Deleted{% endblock %}
+{% block title %}Exchange Pro | Cuenta eliminada{% endblock %}
 {% block content %}
   <div class="card stack">
     <div>
-      <h1 class="success">Account deleted</h1>
-      <p>Your Keycloak account for <strong>{{ deleted_username }}</strong> has been removed.</p>
+      <h1 class="success">Cuenta eliminada</h1>
+      <p>Tu cuenta de Keycloak para <strong>{{ deleted_username }}</strong> ha sido eliminada.</p>
     </div>
 
     <div>
-      <p>The local Django session has also been cleared. If you sign in again, you will need to create a new account or log in with another valid Keycloak user.</p>
+      <p>La sesión local de Django también se ha cerrado. Si vuelves a iniciar sesión, tendrás que crear una cuenta nueva o acceder con otro usuario válido de Keycloak.</p>
     </div>
 
     <div>
-      <a class="btn btn-primary" href="/">Return home</a>
-      <a class="btn btn-secondary" href="/register/">Create a new account</a>
+      <a class="btn btn-primary" href="/">Volver al inicio</a>
+      <a class="btn btn-secondary" href="/register/">Crear una cuenta nueva</a>
     </div>
   </div>
 {% endblock %}

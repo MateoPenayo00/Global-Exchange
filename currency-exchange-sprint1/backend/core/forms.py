@@ -3,14 +3,14 @@ from django import forms
 
 class DeleteAccountForm(forms.Form):
     confirmation = forms.CharField(
-        label="Type DELETE to confirm",
+        label="Escribe DELETE para confirmar",
         max_length=20,
         widget=forms.TextInput(attrs={"autocomplete": "off", "placeholder": "DELETE"}),
-        help_text="Type DELETE in full to confirm that you want to remove the current Keycloak account.",
+        help_text="Escribe DELETE completo para confirmar que quieres eliminar la cuenta actual de Keycloak.",
     )
 
     def clean_confirmation(self):
         value = self.cleaned_data["confirmation"].strip().upper()
         if value != "DELETE":
-            raise forms.ValidationError("Type DELETE exactly to confirm the account deletion.")
+            raise forms.ValidationError("Escribe DELETE exactamente para confirmar la eliminación de la cuenta.")
         return value

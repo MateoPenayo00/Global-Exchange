@@ -1,23 +1,30 @@
 # Currency Exchange Sprint 1
 
-This project is a learning stack for a fictional currency exchange business.
+This project is a local learning stack for a fictional currency exchange business.
 
 ## What it includes
 - Django app
 - Keycloak identity provider
 - PostgreSQL databases
-- Docker Compose orchestration
+- Nginx reverse proxy for localhost and LAN IP access
 
-## Browser access via NPM
-- Main app: https://global-exchange.mateopenayo.dev
-- Keycloak: https://auth.global-exchange.mateopenayo.dev
+## Local browser access
+- Main app: http://localhost
+- Main app over LAN IP: http://192.168.100.13
+- Django admin console: http://localhost/django-admin/
+- Keycloak admin console: http://localhost/admin/
 
-## Backend ports for NPM forwarding
-- Django app: 192.168.100.13:8000
-- Keycloak: 192.168.100.13:8080
+## Host behavior
+- The Django app accepts localhost and the LAN IP automatically.
+- The app also derives the current host from the request, so it can adapt without extra configuration.
+- Keycloak is configured to allow local host variations through the same proxy.
 
-## Basic startup
-1. Review `.env`
+## Language
+- The Django UI is configured in Spanish.
+- Keycloak is configured to use Spanish as the default locale.
+
+## Startup
+1. Review `.env` if you want to customize secrets or hostnames.
 2. Build and start containers:
 
 ```bash
@@ -31,7 +38,8 @@ docker compose up -d --build
 - Delete account from the app
 
 ## Notes
-- `exchange-web` is the Django application container.
-- `exchange-admin-api` is a Keycloak confidential client used for account deletion.
-- The project is intended to sit behind Nginx Proxy Manager later, not a local nginx container.
+- The Django app runs behind nginx.
+- Keycloak is proxied through nginx on the same machine.
+- The app and Keycloak are intended to stay local only.
 - Use `docker compose logs --tail=200 web` if the app restarts.
+- If you need to reset the databases, stop the stack and remove the Docker volumes.
