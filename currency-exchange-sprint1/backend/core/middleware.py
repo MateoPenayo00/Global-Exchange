@@ -11,12 +11,15 @@ class LocalhostAutoDetectMiddleware:
         base_url = f"{request.scheme}://{request.get_host()}"
         realm = settings.KEYCLOAK_REALM
 
+        # Only the endpoints the browser is redirected to should follow the
+        # host the request came in on. The token/userinfo/jwks endpoints are
+        # called server-to-server by Django itself, so they must keep using
+        # KEYCLOAK_INTERNAL_URL (e.g. http://keycloak:8080) — pointing them at
+        # base_url (e.g. http://localhost) breaks them, since "localhost"
+        # from inside the web container refers to the container itself.
         settings.SITE_URL = base_url
         settings.KEYCLOAK_PUBLIC_URL = base_url
         settings.OIDC_OP_AUTHORIZATION_ENDPOINT = f"{base_url}/realms/{realm}/protocol/openid-connect/auth"
-        settings.OIDC_OP_TOKEN_ENDPOINT = f"{base_url}/realms/{realm}/protocol/openid-connect/token"
-        settings.OIDC_OP_USER_ENDPOINT = f"{base_url}/realms/{realm}/protocol/openid-connect/userinfo"
-        settings.OIDC_OP_JWKS_ENDPOINT = f"{base_url}/realms/{realm}/protocol/openid-connect/certs"
         settings.OIDC_OP_LOGOUT_ENDPOINT = f"{base_url}/realms/{realm}/protocol/openid-connect/logout"
 
         return self.get_response(request)
