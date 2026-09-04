@@ -116,11 +116,15 @@ OIDC_RP_SCOPES = "openid email profile"
 OIDC_CREATE_USER = True
 OIDC_STORE_ID_TOKEN = True
 
+# Endpoints the browser is redirected to must use the public URL.
 OIDC_OP_AUTHORIZATION_ENDPOINT = f"{KEYCLOAK_PUBLIC_URL}/realms/{KEYCLOAK_REALM}/protocol/openid-connect/auth"
-OIDC_OP_TOKEN_ENDPOINT = f"{KEYCLOAK_PUBLIC_URL}/realms/{KEYCLOAK_REALM}/protocol/openid-connect/token"
-OIDC_OP_USER_ENDPOINT = f"{KEYCLOAK_PUBLIC_URL}/realms/{KEYCLOAK_REALM}/protocol/openid-connect/userinfo"
-OIDC_OP_JWKS_ENDPOINT = f"{KEYCLOAK_PUBLIC_URL}/realms/{KEYCLOAK_REALM}/protocol/openid-connect/certs"
 OIDC_OP_LOGOUT_ENDPOINT = f"{KEYCLOAK_PUBLIC_URL}/realms/{KEYCLOAK_REALM}/protocol/openid-connect/logout"
+
+# Endpoints Django calls server-to-server must use the internal Docker-network URL,
+# since KEYCLOAK_PUBLIC_URL (e.g. http://localhost) resolves to the web container itself.
+OIDC_OP_TOKEN_ENDPOINT = f"{KEYCLOAK_INTERNAL_URL}/realms/{KEYCLOAK_REALM}/protocol/openid-connect/token"
+OIDC_OP_USER_ENDPOINT = f"{KEYCLOAK_INTERNAL_URL}/realms/{KEYCLOAK_REALM}/protocol/openid-connect/userinfo"
+OIDC_OP_JWKS_ENDPOINT = f"{KEYCLOAK_INTERNAL_URL}/realms/{KEYCLOAK_REALM}/protocol/openid-connect/certs"
 
 AUTHENTICATION_BACKENDS = [
     "core.backends.KeycloakOIDCAuthenticationBackend",
