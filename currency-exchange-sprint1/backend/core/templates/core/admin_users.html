@@ -1,0 +1,44 @@
+{% extends 'core/base.html' %}
+{% block title %}Exchange Pro | Usuarios{% endblock %}
+{% block content %}
+  <div class="card stack">
+    <div style="display:flex; justify-content:space-between; align-items:center; gap:16px; flex-wrap:wrap;">
+      <div>
+        <h1>Gestión de usuarios</h1>
+        <p class="muted">Crea, edita roles y elimina cuentas de Keycloak.</p>
+      </div>
+      <a class="btn btn-primary" href="{% url 'admin_user_create' %}">Nuevo usuario</a>
+    </div>
+
+    <form method="get" class="nav-actions">
+      <input type="text" name="q" value="{{ search }}" placeholder="Buscar por nombre, usuario o correo">
+      <button class="btn btn-secondary" type="submit">Buscar</button>
+    </form>
+
+    <div style="overflow-x:auto;">
+      <table>
+        <thead>
+          <tr><th>Usuario</th><th>Nombre</th><th>Correo</th><th>Roles</th><th>Estado</th><th>Acciones</th></tr>
+        </thead>
+        <tbody>
+          {% for u in users %}
+            <tr>
+              <td>{{ u.username }}</td>
+              <td>{{ u.first_name|default:'' }} {{ u.last_name|default:'' }}</td>
+              <td>{{ u.email|default:'—' }}</td>
+              <td>{% for r in u.roles %}<span class="tag">{{ r|capfirst }}</span>{% empty %}<span class="muted">—</span>{% endfor %}</td>
+              <td>{% if u.enabled %}Activo{% else %}<span class="danger">Deshabilitado</span>{% endif %}</td>
+              <td>
+                <a href="{% url 'admin_user_roles' u.id %}">Roles</a>
+                &nbsp;·&nbsp;
+                <a class="danger" href="{% url 'admin_user_delete' u.id %}">Eliminar</a>
+              </td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="6" class="muted">No hay usuarios que mostrar.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+{% endblock %}

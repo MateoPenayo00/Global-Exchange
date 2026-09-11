@@ -11,6 +11,18 @@
       <p><strong>Usuario:</strong> {{ profile_name }}</p>
       <p><strong>Correo:</strong> {{ profile_email|default:'No disponible todavía' }}</p>
       <p><strong>Sesión:</strong> autenticada a través de Keycloak</p>
+      <p><strong>Roles:</strong>
+        {% for role in user_roles %}<span class="tag">{{ role|capfirst }}</span>{% empty %}<span class="muted">Sin rol asignado</span>{% endfor %}
+      </p>
+    </div>
+
+    <div>
+      <h2>Qué puedes hacer</h2>
+      <ul>
+        {% if can_trade %}<li><a href="/trade/">Comprar y vender divisas</a></li>{% endif %}
+        {% if can_manage_currencies %}<li><a href="/currencies/">Gestionar el valor de las divisas</a> (capacidad de gestor)</li>{% endif %}
+        {% if can_manage_users %}<li><a href="/manage/users/">Crear, editar y eliminar usuarios</a> (capacidad de administrador)</li>{% endif %}
+      </ul>
     </div>
 
     <div>

@@ -38,7 +38,23 @@
       ],
       "attributes": {
         "post.logout.redirect.uris": "http://localhost/|http://127.0.0.1/|http://192.168.100.13/"
-      }
+      },
+      "protocolMappers": [
+        {
+          "name": "realm roles",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-usermodel-realm-role-mapper",
+          "consentRequired": false,
+          "config": {
+            "multivalued": "true",
+            "claim.name": "realm_access.roles",
+            "jsonType.label": "String",
+            "userinfo.token.claim": "true",
+            "id.token.claim": "true",
+            "access.token.claim": "true"
+          }
+        }
+      ]
     },
     {
       "clientId": "exchange-admin-api",
@@ -60,16 +76,48 @@
   "roles": {
     "realm": [
       {
-        "name": "customer",
-        "description": "Standard customer role"
+        "name": "admin",
+        "description": "Crea, gestiona y elimina usuarios; incluye las capacidades de gestor."
       },
       {
-        "name": "admin",
-        "description": "Administrative role"
+        "name": "manager",
+        "description": "Gestiona el valor de ciertas divisas (capacidad futura)."
+      },
+      {
+        "name": "user",
+        "description": "Compra y vende divisas."
+      },
+      {
+        "name": "customer",
+        "description": "Rol heredado, equivalente a user."
       }
     ]
   },
   "users": [
+    {
+      "username": "demo.admin",
+      "enabled": true,
+      "emailVerified": true,
+      "firstName": "Demo",
+      "lastName": "Admin",
+      "email": "demo.admin@example.com",
+      "credentials": [
+        {"type": "password", "value": "ChangeMe123!", "temporary": false}
+      ],
+      "realmRoles": ["admin"]
+    },
+    {
+      "username": "demo.manager",
+      "enabled": true,
+      "emailVerified": true,
+      "firstName": "Demo",
+      "lastName": "Manager",
+      "email": "demo.manager@example.com",
+      "credentials": [
+        {"type": "password", "value": "ChangeMe123!", "temporary": false}
+      ],
+      "realmRoles": ["manager"]
+    },
     {
       "username": "demo.customer",
       "enabled": true,
@@ -78,13 +126,9 @@
       "lastName": "Customer",
       "email": "demo.customer@example.com",
       "credentials": [
-        {
-          "type": "password",
-          "value": "ChangeMe123!",
-          "temporary": false
-        }
+        {"type": "password", "value": "ChangeMe123!", "temporary": false}
       ],
-      "realmRoles": ["customer"]
+      "realmRoles": ["user"]
     },
     {
       "username": "service-account-exchange-admin-api",
@@ -93,9 +137,7 @@
       "serviceAccountClientId": "exchange-admin-api",
       "clientRoles": {
         "realm-management": [
-          "manage-users",
-          "view-users",
-          "query-users"
+          "realm-admin"
         ]
       }
     }
