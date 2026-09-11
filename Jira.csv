@@ -1,0 +1,113 @@
+Summary,Issue key,Issue id,Issue Type,Status,Project key,Project name,Project type,Project lead,Project lead id,Project description,Priority,Resolution,Assignee,Assignee Id,Reporter,Reporter Id,Creator,Creator Id,Created,Updated,Last Viewed,Resolved,Due date,Votes,Description,Environment,Watchers,Watchers Id,Log Work,Original estimate,Remaining Estimate,Time Spent,Work Ratio,Σ Original Estimate,Σ Remaining Estimate,Σ Time Spent,Security Level,Custom field (Development),Custom field (Issue color),Custom field (Rank),Sprint,Sprint,Sprint,Custom field (Start date),Custom field (Story point estimate),Custom field (Team),Custom field (Vulnerability),Custom field (Vulnerability),Parent,Parent key,Parent summary,Status Category,Status Category Changed
+FX-12-CRUDS-Y-MONEDAS,TAREA-42,10073,Task,Done,TAREA,IS2 Equipo 10,software,Mateo Nicolas Penayo Farina,712020:8bf59599-6147-47ae-89d6-37c942bc3544,,Medium,Done,,,Mateo Nicolas Penayo Farina,712020:8bf59599-6147-47ae-89d6-37c942bc3544,Mateo Nicolas Penayo Farina,712020:8bf59599-6147-47ae-89d6-37c942bc3544,11/Sep/26 1:54 PM,11/Sep/26 1:55 PM,,11/Sep/26 1:55 PM,,0,,,Mateo Nicolas Penayo Farina,712020:8bf59599-6147-47ae-89d6-37c942bc3544,,,,,,,,,,,,0|i0006h:,SCRUM Sprint 2,,,,,,,,,,,Done,11/Sep/26 1:55 PM
+FX-11-ROLES-Y-PERMISOS,TAREA-41,10072,Task,Done,TAREA,IS2 Equipo 10,software,Mateo Nicolas Penayo Farina,712020:8bf59599-6147-47ae-89d6-37c942bc3544,,Medium,Done,,,Mateo Nicolas Penayo Farina,712020:8bf59599-6147-47ae-89d6-37c942bc3544,Mateo Nicolas Penayo Farina,712020:8bf59599-6147-47ae-89d6-37c942bc3544,11/Sep/26 1:54 PM,11/Sep/26 1:55 PM,,11/Sep/26 1:55 PM,,0,,,Mateo Nicolas Penayo Farina,712020:8bf59599-6147-47ae-89d6-37c942bc3544,,,,,,,,,,,,0|i0006f:,SCRUM Sprint 2,,,,,,,,,,,Done,11/Sep/26 1:55 PM
+FX-10: API y lógica de consulta de Monedas,TAREA-40,10071,Task,Done,TAREA,IS2 Equipo 10,software,Mateo Nicolas Penayo Farina,712020:8bf59599-6147-47ae-89d6-37c942bc3544,,Medium,Done,,,Nestor Ledesma,712020:166cff4d-c2cb-4a50-be87-6c806c7b814a,Nestor Ledesma,712020:166cff4d-c2cb-4a50-be87-6c806c7b814a,11/Sep/26 1:53 PM,11/Sep/26 1:55 PM,11/Sep/26 2:02 PM,11/Sep/26 1:55 PM,,0,"Implementar endpoints o servicios necesarios para consultar y administrar las monedas desde la interfaz web
+
+
+
+*Criterios de aceptación*
+
+* Existe endpoint para listar monedas.
+* Existe endpoint para obtener una moneda.
+* Existe endpoint para crear una moneda.
+* Existe endpoint para actualizar una moneda.
+* Existe endpoint para cambiar su estado.
+* Se retornan respuestas HTTP adecuadas ante operaciones exitosas y errores.
+* Se validan datos recibidos desde el cliente.
+* Los endpoints respetan los permisos definidos",,Nestor Ledesma,712020:166cff4d-c2cb-4a50-be87-6c806c7b814a,,,,,,,,,,,,0|i0007z:,SCRUM Sprint 2,,,,,,,,,,,Done,11/Sep/26 1:55 PM
+ FX-9: Modelo y CRUD de Monedas,TAREA-39,10070,Task,Done,TAREA,IS2 Equipo 10,software,Mateo Nicolas Penayo Farina,712020:8bf59599-6147-47ae-89d6-37c942bc3544,,Medium,Done,,,Nestor Ledesma,712020:166cff4d-c2cb-4a50-be87-6c806c7b814a,Nestor Ledesma,712020:166cff4d-c2cb-4a50-be87-6c806c7b814a,11/Sep/26 1:44 PM,11/Sep/26 1:55 PM,,11/Sep/26 1:55 PM,,0,"Desarrollar el modelo de datos y las operaciones CRUD necesarias para administrar las monedas que podrá utilizar la plataforma. La moneda deberá poder habilitarse o deshabilitarse sin necesidad de eliminar el registro
+
+
+*Criterios de aceptación*
+
+* Se puede crear una moneda indicando al menos código, nombre y estado.
+* El código de moneda debe ser único.
+* Se puede visualizar el listado de monedas.
+* Se puede consultar el detalle de una moneda.
+* Se puede modificar la información de una moneda.
+* Se puede habilitar/deshabilitar una moneda.
+* No se permite crear monedas duplicadas.
+* Se validan los campos obligatorios.
+* Las operaciones requieren los permisos correspondientes.
+* Existen pruebas unitarias para las reglas principales",,Nestor Ledesma,712020:166cff4d-c2cb-4a50-be87-6c806c7b814a,,,,,,,,,,,,0|i0006m:,SCRUM Sprint 2,,,,,,,,,,,Done,11/Sep/26 1:55 PM
+FX-09: FRONT END BÁSICO,TAREA-38,10069,Task,Done,TAREA,IS2 Equipo 10,software,Mateo Nicolas Penayo Farina,712020:8bf59599-6147-47ae-89d6-37c942bc3544,,Medium,Done,Mateo Nicolas Penayo Farina,712020:8bf59599-6147-47ae-89d6-37c942bc3544,Mateo Nicolas Penayo Farina,712020:8bf59599-6147-47ae-89d6-37c942bc3544,Mateo Nicolas Penayo Farina,712020:8bf59599-6147-47ae-89d6-37c942bc3544,30/Aug/26 10:01 AM,04/Sep/26 5:06 PM,04/Sep/26 5:06 PM,04/Sep/26 5:04 PM,,0,"Crear una UI básica.
+
+Criterios de aceptación:
+
+# El landing page tiene alguna imagen de branding.
+# El dashboard muestre el estado del usuario.
+# El layout es simple y fácil de leer.
+# Existen botones de Login, logout, delete.",,Mateo Nicolas Penayo Farina,712020:8bf59599-6147-47ae-89d6-37c942bc3544,,,,,,,,,,,,0|i0005v:9,SCRUM Sprint 1,,,,2.0,,,,10060,TAREA-29,EPIC-05: FRONTEND ,Done,04/Sep/26 5:04 PM
+FX-08: AÑADIR NGINX REVERSE PROXY,TAREA-37,10068,Task,Done,TAREA,IS2 Equipo 10,software,Mateo Nicolas Penayo Farina,712020:8bf59599-6147-47ae-89d6-37c942bc3544,,Medium,Done,Nestor Ledesma,712020:166cff4d-c2cb-4a50-be87-6c806c7b814a,Mateo Nicolas Penayo Farina,712020:8bf59599-6147-47ae-89d6-37c942bc3544,Mateo Nicolas Penayo Farina,712020:8bf59599-6147-47ae-89d6-37c942bc3544,30/Aug/26 9:59 AM,10/Sep/26 9:32 PM,,10/Sep/26 9:31 PM,,0,"Colocar a Nginx frente a Django y Keycloak
+
+Criterios de aceptacion:
+
+# El tráfico de buscador pasa través de Nginx
+# Nginx manda los request a Django y Keycloak.
+# Assets estáticos puedens er servidos o entrar en proxy correctamente.",,Mateo Nicolas Penayo Farina,712020:8bf59599-6147-47ae-89d6-37c942bc3544,,,,,,,,,,,,0|i0007j:,SCRUM Sprint 1,,,,,,,,10059,TAREA-28,EPIC-04: INFRAESTRUCTURA Y DEPLOY,Done,10/Sep/26 9:31 PM
+FX-07: AÑADIR REGISTRO Y BORRADO DE USUARIOS,TAREA-36,10067,Task,Done,TAREA,IS2 Equipo 10,software,Mateo Nicolas Penayo Farina,712020:8bf59599-6147-47ae-89d6-37c942bc3544,,Medium,Done,Mateo Nicolas Penayo Farina,712020:8bf59599-6147-47ae-89d6-37c942bc3544,Mateo Nicolas Penayo Farina,712020:8bf59599-6147-47ae-89d6-37c942bc3544,Mateo Nicolas Penayo Farina,712020:8bf59599-6147-47ae-89d6-37c942bc3544,30/Aug/26 9:57 AM,11/Sep/26 1:55 PM,,11/Sep/26 1:55 PM,,0,"Permitir a los usuarios crear y borrar sus propias cuentas.
+
+Criterios de aceptación:
+
+# El registro inica desde el buscador.
+# La creación de usuarios es manejada por Keycloak
+# Es posible realizar borrado de usuario a través del buscador
+# Un usuario que ha sido borrado no puede loggearse nuevamente.",,Mateo Nicolas Penayo Farina,712020:8bf59599-6147-47ae-89d6-37c942bc3544,,,,,,,,,,,,0|i0006d:,SCRUM Sprint 1,SCRUM Sprint 2,,,,,,,10058,TAREA-27,EPIC-03: AUTENTICACIOIN Y MANEJO DE USUARIOS,Done,11/Sep/26 1:55 PM
+FX-06: INTEGRACION DE LOGIN DE DJANGO A TRAVES DE KEYCLOAK,TAREA-35,10066,Task,Done,TAREA,IS2 Equipo 10,software,Mateo Nicolas Penayo Farina,712020:8bf59599-6147-47ae-89d6-37c942bc3544,,Medium,Done,Mateo Nicolas Penayo Farina,712020:8bf59599-6147-47ae-89d6-37c942bc3544,Mateo Nicolas Penayo Farina,712020:8bf59599-6147-47ae-89d6-37c942bc3544,Mateo Nicolas Penayo Farina,712020:8bf59599-6147-47ae-89d6-37c942bc3544,30/Aug/26 9:45 AM,04/Sep/26 5:05 PM,04/Sep/26 5:05 PM,04/Sep/26 5:03 PM,,0,"Lograr que el login desde un buscador ocurra a través de Keycloak.
+
+Criterios de aceptación:
+
+# Los usuarios pueden dar login desde Django.
+# El usuario es redigirdo a Keycloak.
+# Un login exitoso retorna a Django.
+# Django muestra exitosamente la informacion del usuario autenticado.",,Mateo Nicolas Penayo Farina,712020:8bf59599-6147-47ae-89d6-37c942bc3544,,,,,,,,,,,,0|i0005v:7,SCRUM Sprint 1,,,,3.0,,,,10058,TAREA-27,EPIC-03: AUTENTICACIOIN Y MANEJO DE USUARIOS,Done,04/Sep/26 5:03 PM
+FX-05: SET UP DE REALM DE KEYCLOAK Y CLIENTE,TAREA-34,10065,Task,Done,TAREA,IS2 Equipo 10,software,Mateo Nicolas Penayo Farina,712020:8bf59599-6147-47ae-89d6-37c942bc3544,,Medium,Done,Mateo Nicolas Penayo Farina,712020:8bf59599-6147-47ae-89d6-37c942bc3544,Mateo Nicolas Penayo Farina,712020:8bf59599-6147-47ae-89d6-37c942bc3544,Mateo Nicolas Penayo Farina,712020:8bf59599-6147-47ae-89d6-37c942bc3544,30/Aug/26 9:43 AM,11/Sep/26 1:55 PM,04/Sep/26 5:06 PM,11/Sep/26 1:55 PM,,0,"Crear un proveedor de identidad para configuraciones.
+
+Criterios de aceptación:
+
+# Inicia el contenedor de Keycloak.
+# Existe un realm de proyecto.
+# Existe un cliente para Django.
+# Se han configurado URIs de redireccion.
+# Se ha habilitado registro de usuarios.",,Mateo Nicolas Penayo Farina,712020:8bf59599-6147-47ae-89d6-37c942bc3544,,,,,,,,,,,,0|i0006v:,SCRUM Sprint 1,SCRUM Sprint 2,,,4.0,,,,10058,TAREA-27,EPIC-03: AUTENTICACIOIN Y MANEJO DE USUARIOS,Done,11/Sep/26 1:55 PM
+FX-04: AÑADIR CONECTIVIDAD POSTGRESQL,TAREA-33,10064,Task,Done,TAREA,IS2 Equipo 10,software,Mateo Nicolas Penayo Farina,712020:8bf59599-6147-47ae-89d6-37c942bc3544,,Medium,Done,Mateo Nicolas Penayo Farina,712020:8bf59599-6147-47ae-89d6-37c942bc3544,Mateo Nicolas Penayo Farina,712020:8bf59599-6147-47ae-89d6-37c942bc3544,Mateo Nicolas Penayo Farina,712020:8bf59599-6147-47ae-89d6-37c942bc3544,30/Aug/26 9:41 AM,04/Sep/26 5:05 PM,04/Sep/26 5:05 PM,30/Aug/26 12:21 PM,,0,"Conecgtar a Django con Postgresql
+
+Criterios de aceptación:
+
+# El contenedor de PostgreSQL inicia.
+# Django se conecta a la base de datos.
+# Se pueden realizar migraciones exitosamente.
+# Las credenciales de la base de datos vienen de variables del environment.",,Mateo Nicolas Penayo Farina,712020:8bf59599-6147-47ae-89d6-37c942bc3544,,,,,,,,,,,,0|i0005v:6,SCRUM Sprint 1,,,,2.0,,,,10058,TAREA-27,EPIC-03: AUTENTICACIOIN Y MANEJO DE USUARIOS,Done,30/Aug/26 12:21 PM
+FX-03: BOOTSTRAP DE PROYECTO DJANGO,TAREA-32,10063,Task,Done,TAREA,IS2 Equipo 10,software,Mateo Nicolas Penayo Farina,712020:8bf59599-6147-47ae-89d6-37c942bc3544,,Medium,Done,Mateo Nicolas Penayo Farina,712020:8bf59599-6147-47ae-89d6-37c942bc3544,Mateo Nicolas Penayo Farina,712020:8bf59599-6147-47ae-89d6-37c942bc3544,Mateo Nicolas Penayo Farina,712020:8bf59599-6147-47ae-89d6-37c942bc3544,30/Aug/26 9:39 AM,11/Sep/26 1:40 PM,04/Sep/26 5:05 PM,04/Sep/26 5:03 PM,,0,"Crear el primer proyecto y aplicacion en Django
+
+Criterios de aceptacion:
+
+# Django inicia en un contenedor.
+# La pagina inicial retorna una respuesta basica
+# Carpetas static y template existen",,Mateo Nicolas Penayo Farina,712020:8bf59599-6147-47ae-89d6-37c942bc3544,,,,,,,,,,,,0|i0005v:4,SCRUM Sprint 1,,,,5.0,,,,10057,TAREA-26,EPIC-02: ESQUELETO DE APLICACION,Done,04/Sep/26 5:03 PM
+FX-02: ESQUELETO DOCKER COMPOSE,TAREA-31,10062,Task,Done,TAREA,IS2 Equipo 10,software,Mateo Nicolas Penayo Farina,712020:8bf59599-6147-47ae-89d6-37c942bc3544,,Medium,Done,Mateo Nicolas Penayo Farina,712020:8bf59599-6147-47ae-89d6-37c942bc3544,Mateo Nicolas Penayo Farina,712020:8bf59599-6147-47ae-89d6-37c942bc3544,Mateo Nicolas Penayo Farina,712020:8bf59599-6147-47ae-89d6-37c942bc3544,30/Aug/26 9:38 AM,11/Sep/26 1:40 PM,04/Sep/26 5:05 PM,30/Aug/26 12:21 PM,,0,"Crear una estructura de carpetas y un compose inicial.
+
+Criterios de aceptacion:
+
+# Existe ‘docker-compose.yml’
+# Existen carpetas para Django, Nginx y Keycloak config.
+# ‘docker comppose up’ inicia un servicio de prueba sin errores.",,Mateo Nicolas Penayo Farina,712020:8bf59599-6147-47ae-89d6-37c942bc3544,;30/Aug/26 12:20 PM;2fb8308b-7ebc-4083-8940-f7eb1fd5f572;7200,,0,7200,,,0,7200,,,,0|i0005v:,SCRUM Sprint 1,,,,3.0,,,,10059,TAREA-28,EPIC-04: INFRAESTRUCTURA Y DEPLOY,Done,30/Aug/26 12:21 PM
+"FX-01: CREAR REPOSITORIO, BRANCHES Y PROTECCIONES",TAREA-30,10061,Task,Done,TAREA,IS2 Equipo 10,software,Mateo Nicolas Penayo Farina,712020:8bf59599-6147-47ae-89d6-37c942bc3544,,Medium,Done,Enrique Allo Collante,712020:e09b7d5e-6db0-4fa8-9001-8e9ae95237d8,Mateo Nicolas Penayo Farina,712020:8bf59599-6147-47ae-89d6-37c942bc3544,Mateo Nicolas Penayo Farina,712020:8bf59599-6147-47ae-89d6-37c942bc3544,30/Aug/26 9:36 AM,11/Sep/26 1:39 PM,04/Sep/26 5:05 PM,04/Sep/26 5:03 PM,,0,"Establecer un repostorio y reglas de GitFlow
+
+Criterios de aceptacion:
+
+# Existe repostorio en github
+# Existen branches main y development
+# Se han habilitado protecciones de branches
+# No está permitido pushear directo a main o development
+# Se requieren PRs para merges",,Mateo Nicolas Penayo Farina,712020:8bf59599-6147-47ae-89d6-37c942bc3544,,,,,,,,,,,,0|i0005t:,SCRUM Sprint 1,,,,1.0,,,,10060,TAREA-29,EPIC-05: FRONTEND ,Done,04/Sep/26 5:03 PM
+EPIC-05: FRONTEND ,TAREA-29,10060,Epic,To Do,TAREA,IS2 Equipo 10,software,Mateo Nicolas Penayo Farina,712020:8bf59599-6147-47ae-89d6-37c942bc3544,,Medium,,,,Mateo Nicolas Penayo Farina,712020:8bf59599-6147-47ae-89d6-37c942bc3544,Mateo Nicolas Penayo Farina,712020:8bf59599-6147-47ae-89d6-37c942bc3544,30/Aug/26 9:31 AM,11/Sep/26 1:55 PM,,,,0,,,Mateo Nicolas Penayo Farina,712020:8bf59599-6147-47ae-89d6-37c942bc3544,,,,,,,,,,,dark_purple,0|i0005r:,SCRUM Sprint 1,SCRUM Sprint 2,SCRUM Sprint 3,,,,,,,,,To Do,30/Aug/26 9:31 AM
+EPIC-04: INFRAESTRUCTURA Y DEPLOY,TAREA-28,10059,Epic,To Do,TAREA,IS2 Equipo 10,software,Mateo Nicolas Penayo Farina,712020:8bf59599-6147-47ae-89d6-37c942bc3544,,Medium,,,,Mateo Nicolas Penayo Farina,712020:8bf59599-6147-47ae-89d6-37c942bc3544,Mateo Nicolas Penayo Farina,712020:8bf59599-6147-47ae-89d6-37c942bc3544,30/Aug/26 9:31 AM,11/Sep/26 1:55 PM,,,,0,,,Mateo Nicolas Penayo Farina,712020:8bf59599-6147-47ae-89d6-37c942bc3544,,,,,,,0,7200,,,dark_purple,0|i0005j:,SCRUM Sprint 1,SCRUM Sprint 2,SCRUM Sprint 3,,,,,,,,,To Do,30/Aug/26 9:31 AM
+EPIC-03: AUTENTICACIOIN Y MANEJO DE USUARIOS,TAREA-27,10058,Epic,To Do,TAREA,IS2 Equipo 10,software,Mateo Nicolas Penayo Farina,712020:8bf59599-6147-47ae-89d6-37c942bc3544,,Medium,,,,Mateo Nicolas Penayo Farina,712020:8bf59599-6147-47ae-89d6-37c942bc3544,Mateo Nicolas Penayo Farina,712020:8bf59599-6147-47ae-89d6-37c942bc3544,30/Aug/26 9:31 AM,11/Sep/26 1:55 PM,,,,0,,,Mateo Nicolas Penayo Farina,712020:8bf59599-6147-47ae-89d6-37c942bc3544,,,,,,,,,,,dark_purple,0|i0005b:,SCRUM Sprint 1,SCRUM Sprint 2,SCRUM Sprint 3,,,,,,,,,To Do,30/Aug/26 9:31 AM
+EPIC-02: ESQUELETO DE APLICACION,TAREA-26,10057,Epic,To Do,TAREA,IS2 Equipo 10,software,Mateo Nicolas Penayo Farina,712020:8bf59599-6147-47ae-89d6-37c942bc3544,,Medium,,,,Mateo Nicolas Penayo Farina,712020:8bf59599-6147-47ae-89d6-37c942bc3544,Mateo Nicolas Penayo Farina,712020:8bf59599-6147-47ae-89d6-37c942bc3544,30/Aug/26 9:30 AM,11/Sep/26 1:55 PM,,,,0,,,Mateo Nicolas Penayo Farina,712020:8bf59599-6147-47ae-89d6-37c942bc3544,,,,,,,,,,,dark_purple,0|i00053:,SCRUM Sprint 1,SCRUM Sprint 2,SCRUM Sprint 3,,,,,,,,,To Do,30/Aug/26 9:30 AM
+EPIC-01: SETUP REPOSITORIO,TAREA-25,10056,Epic,To Do,TAREA,IS2 Equipo 10,software,Mateo Nicolas Penayo Farina,712020:8bf59599-6147-47ae-89d6-37c942bc3544,,Medium,,,,Mateo Nicolas Penayo Farina,712020:8bf59599-6147-47ae-89d6-37c942bc3544,Mateo Nicolas Penayo Farina,712020:8bf59599-6147-47ae-89d6-37c942bc3544,30/Aug/26 9:30 AM,11/Sep/26 1:55 PM,,,,0,,,Mateo Nicolas Penayo Farina,712020:8bf59599-6147-47ae-89d6-37c942bc3544,,,,,,,,,,,dark_purple,0|i0004v:,SCRUM Sprint 1,SCRUM Sprint 2,SCRUM Sprint 3,,,,,,,,,To Do,30/Aug/26 9:30 AM
+Interfaz Gráfica,TAREA-22,10021,Epic,To Do,TAREA,IS2 Equipo 10,software,Mateo Nicolas Penayo Farina,712020:8bf59599-6147-47ae-89d6-37c942bc3544,,Medium,,,,Mateo Nicolas Penayo Farina,712020:8bf59599-6147-47ae-89d6-37c942bc3544,Mateo Nicolas Penayo Farina,712020:8bf59599-6147-47ae-89d6-37c942bc3544,17/Aug/26 3:08 PM,17/Aug/26 3:08 PM,17/Aug/26 3:08 PM,,,0,,,Mateo Nicolas Penayo Farina,712020:8bf59599-6147-47ae-89d6-37c942bc3544,,,,,,,,,,,yellow,0|i0004n:,,,,,,,,,,,,To Do,17/Aug/26 3:08 PM
+Generacion de facturas y reportes,TAREA-16,10015,Epic,To Do,TAREA,IS2 Equipo 10,software,Mateo Nicolas Penayo Farina,712020:8bf59599-6147-47ae-89d6-37c942bc3544,,Medium,,,,Mateo Nicolas Penayo Farina,712020:8bf59599-6147-47ae-89d6-37c942bc3544,Mateo Nicolas Penayo Farina,712020:8bf59599-6147-47ae-89d6-37c942bc3544,17/Aug/26 2:57 PM,17/Aug/26 2:57 PM,17/Aug/26 2:57 PM,,,0,,,Mateo Nicolas Penayo Farina,712020:8bf59599-6147-47ae-89d6-37c942bc3544,,,,,,,,,,,dark_orange,0|i0003b:,,,,,,,,,,,,To Do,17/Aug/26 2:57 PM
+Administracion de cuentas y configuracion,TAREA-14,10013,Epic,To Do,TAREA,IS2 Equipo 10,software,Mateo Nicolas Penayo Farina,712020:8bf59599-6147-47ae-89d6-37c942bc3544,,Medium,,,,Mateo Nicolas Penayo Farina,712020:8bf59599-6147-47ae-89d6-37c942bc3544,Mateo Nicolas Penayo Farina,712020:8bf59599-6147-47ae-89d6-37c942bc3544,17/Aug/26 2:55 PM,17/Aug/26 3:00 PM,17/Aug/26 2:59 PM,,,0,,,Mateo Nicolas Penayo Farina,712020:8bf59599-6147-47ae-89d6-37c942bc3544,,,,,,,,,,,teal,0|i0002v:,,,,,,,,,,,,To Do,17/Aug/26 2:55 PM
+Actualización y tasas,TAREA-6,10005,Epic,To Do,TAREA,IS2 Equipo 10,software,Mateo Nicolas Penayo Farina,712020:8bf59599-6147-47ae-89d6-37c942bc3544,,Medium,,,,Mateo Nicolas Penayo Farina,712020:8bf59599-6147-47ae-89d6-37c942bc3544,Mateo Nicolas Penayo Farina,712020:8bf59599-6147-47ae-89d6-37c942bc3544,17/Aug/26 2:47 PM,17/Aug/26 2:47 PM,17/Aug/26 2:55 PM,,,0,,,Mateo Nicolas Penayo Farina,712020:8bf59599-6147-47ae-89d6-37c942bc3544,,,,,,,,,,,orange,0|i00013:,,,,,,,,,,,,To Do,17/Aug/26 2:47 PM
+Manejo de Usuarios SSO,TAREA-1,10000,Epic,To Do,TAREA,IS2 Equipo 10,software,Mateo Nicolas Penayo Farina,712020:8bf59599-6147-47ae-89d6-37c942bc3544,,Medium,,,,Mateo Nicolas Penayo Farina,712020:8bf59599-6147-47ae-89d6-37c942bc3544,Mateo Nicolas Penayo Farina,712020:8bf59599-6147-47ae-89d6-37c942bc3544,17/Aug/26 2:34 PM,17/Aug/26 2:34 PM,17/Aug/26 3:03 PM,,,0,,,Mateo Nicolas Penayo Farina,712020:8bf59599-6147-47ae-89d6-37c942bc3544,,,,,,,,,,,dark_purple,0|hzzzzz:,,,,,,,,,,,,To Do,17/Aug/26 2:34 PM

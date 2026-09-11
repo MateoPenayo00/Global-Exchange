@@ -1,0 +1,111 @@
+======================================================================
+PLA.txt - Retrospectiva de Sprint 1 y Sprint 2 (Exchange Pro / IS2 Equipo 10)
+Generado: 11 de septiembre de 2026
+Fuente: Jira.csv (export del tablero SCRUM, proyecto TAREA)
+======================================================================
+
+----------------------------------------------------------------------
+1) RESUMEN DE SPRINT 1
+----------------------------------------------------------------------
+Duración observada: 30/ago/2026 (creación de tareas) a 10/sep/2026
+(última resolución dentro del sprint).
+
+Tareas del sprint (todas tipo Task, todas cerradas como "Done"):
+- FX-01: Crear repositorio, branches y protecciones (1 SP) - Enrique Allo Collante
+- FX-02: Esqueleto docker compose (3 SP) - Mateo Nicolas Penayo Farina
+- FX-03: Bootstrap de proyecto Django (5 SP) - Mateo Nicolas Penayo Farina
+- FX-04: Añadir conectividad PostgreSQL (2 SP) - Mateo Nicolas Penayo Farina
+- FX-05: Set up de realm de Keycloak y cliente (4 SP) - Mateo Nicolas Penayo Farina
+    (se cerró recién en Sprint 2, ver sección 3)
+- FX-06: Integración de login de Django a través de Keycloak (3 SP) -
+    Mateo Nicolas Penayo Farina
+- FX-07: Añadir registro y borrado de usuarios (sin SP cargado) -
+    Mateo Nicolas Penayo Farina (se cerró recién en Sprint 2)
+- FX-08: Añadir Nginx reverse proxy (sin SP cargado) - Nestor Ledesma
+- FX-09: Frontend básico (2 SP) - Mateo Nicolas Penayo Farina
+
+Story points completados dentro del propio Sprint 1: 20 SP (sumando las
+7 tareas con estimación cargada; FX-07 y FX-08 no tienen SP registrado
+en Jira).
+
+----------------------------------------------------------------------
+2) RESUMEN DE SPRINT 2
+----------------------------------------------------------------------
+Duración observada: todas las tareas nuevas se crearon y resolvieron el
+11/sep/2026 (carga tardía / cierre administrativo del sprint más que un
+reflejo del trabajo real día a día).
+
+Tareas nuevas del sprint (todas Task, todas "Done", sin SP cargado):
+- FX-09: Modelo y CRUD de Monedas - Mateo Nicolas Penayo Farina
+- FX-10: API y lógica de consulta de Monedas - Nestor Ledesma
+- FX-11: Roles y permisos - Mateo Nicolas Penayo Farina
+- FX-12: CRUDs de Monedas, Billetera y Usuarios - Mateo Nicolas Penayo Farina
+
+Tareas arrastradas desde Sprint 1 y cerradas en Sprint 2:
+- FX-05: Set up de realm de Keycloak y cliente (4 SP)
+- FX-07: Añadir registro y borrado de usuarios (sin SP)
+
+Las 5 épicas del backlog (EPIC-01 a EPIC-05, setup de repositorio,
+esqueleto de aplicación, autenticación, infraestructura y frontend)
+siguen en estado "To Do": son contenedores de alto nivel que agrupan
+las tareas y no se cierran hasta que termine todo el proyecto.
+
+----------------------------------------------------------------------
+3) QUÉ SALIÓ BIEN
+----------------------------------------------------------------------
+- Se completó el 100% de las tareas planificadas en ambos sprints
+  (todas terminaron en estado "Done", ninguna quedó bloqueada o
+  descartada).
+- La infraestructura base (Sprint 1) quedó sólida y sirvió de
+  plataforma estable para Sprint 2: Docker Compose, Django, PostgreSQL,
+  Nginx y Keycloak funcionando juntos sin retrabajo mayor.
+- Sprint 2 pudo construir funcionalidad de negocio real (CRUD de
+  monedas, billetera, roles y permisos, gestión de usuarios) apoyándose
+  en esa base, lo que confirma que la inversión en infraestructura del
+  Sprint 1 rindió frutos.
+- Se logró cerrar el trabajo pendiente de Sprint 1 (FX-05 y FX-07)
+  dentro de Sprint 2 en lugar de dejarlo indefinido.
+
+----------------------------------------------------------------------
+4) QUÉ NO SALIÓ BIEN / PUNTOS A MEJORAR
+----------------------------------------------------------------------
+- Carga de trabajo muy concentrada: de las 13 tareas de ambos sprints,
+  9 quedaron asignadas a la misma persona (Mateo Nicolas Penayo Farina);
+  Nestor Ledesma tomó 2 y Enrique Allo Collante 1. Esto es un riesgo de
+  "bus factor" y probablemente explica por qué algunas tareas se
+  arrastraron de un sprint a otro.
+- Estimación incompleta: FX-07, FX-08 (Sprint 1) y las 4 tareas nuevas
+  de Sprint 2 (FX-09 a FX-12) no tienen story points cargados en Jira.
+  Sin esa estimación no se puede calcular una velocity real del equipo
+  ni comparar sprints de forma objetiva.
+- Prácticamente no se registró tiempo trabajado (columna "Time Spent"):
+  de 13 tareas, solo una (FX-02) tiene horas cargadas (2 h). Esto le
+  quita valor a Jira como herramienta de seguimiento, más allá de la
+  foto final de "hecho / no hecho".
+- Las fechas de creación y resolución de las tareas de Sprint 2 (todas
+  el mismo día, 11/sep) sugieren que la carga en Jira se hizo de forma
+  retroactiva/administrativa al cierre del sprint, no en el momento en
+  que se iba haciendo el trabajo. Esto dificulta usar el tablero para
+  detectar problemas mientras el sprint está en curso.
+- Reutilización del identificador "FX-09" para dos tareas distintas
+  ("Frontend básico" en Sprint 1 y "Modelo y CRUD de Monedas" en
+  Sprint 2): puede generar confusión al buscar histórico por código.
+
+----------------------------------------------------------------------
+5) ACCIONES PROPUESTAS PARA EL PRÓXIMO SPRINT
+----------------------------------------------------------------------
+- Repartir tareas de forma más pareja entre los tres integrantes del
+  equipo, en particular las de infraestructura/backend que hoy
+  dependen de una sola persona.
+- Exigir story points en toda tarea antes de que entre al sprint
+  (definition of ready), para poder calcular velocity real.
+- Cargar el tiempo trabajado (o al menos una estimación al cierre) en
+  cada tarea, aunque sea de forma aproximada, para que el registro de
+  Jira sea útil como histórico.
+- Actualizar el tablero durante el sprint (mover tarjetas, comentar
+  bloqueos) en lugar de cerrarlo todo el último día.
+- No reutilizar códigos de feature (FX-XX) entre sprints distintos;
+  usar el siguiente número disponible aunque el tema sea similar.
+- Revisar en el próximo planning si FX-05 y FX-07 quedaron afuera de
+  Sprint 1 por subestimación de esfuerzo o por prioridades cambiantes,
+  para ajustar la capacidad planificada de Sprint 3.

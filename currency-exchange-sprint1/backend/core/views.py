@@ -1,3 +1,4 @@
+from decimal import ROUND_DOWN, Decimal
 from functools import wraps
 from urllib.parse import urlencode
 
@@ -6,13 +7,27 @@ from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth import logout
 from django.core.exceptions import PermissionDenied
-from django.shortcuts import render, redirect
+from django.db import transaction
+from django.db.models import ProtectedError
+from django.shortcuts import get_object_or_404, render, redirect
 from django.urls import reverse
 
 from . import roles as role_lib
-from .forms import AdminUserForm, AdminUserRolesForm, DeleteAccountForm
+from .forms import (
+    AdminUserForm,
+    AdminUserRolesForm,
+    CurrencyBuyForm,
+    CurrencyForm,
+    DeleteAccountForm,
+    WalletDepositForm,
+    WalletWithdrawForm,
+)
+from .models import Currency, Wallet, WalletTransaction
 from .roles import ROLE_LABELS
 from .services.keycloak_admin import KeycloakAdminClient, KeycloakAdminError
+
+TEST_DEPOSIT_AMOUNT = Decimal("100.00")
+TEST_WITHDRAW_AMOUNT = Decimal("1.000000")
 
 
 def role_required(*required):
@@ -57,16 +72,246 @@ def account(request):
     return render(request, "core/account.html", _nav_context(request))
 
 
+def _get_wallet(user) -> Wallet:
+    wallet, _ = Wallet.objects.get_or_create(user=user)
+    return wallet
+
+
+@role_required(role_lib.USER)
+def wallet_view(request):
+    """A user's wallet: USD balance, currency holdings, deposit and withdraw."""
+    wallet = _get_wallet(request.user)
+    deposit_form = WalletDepositForm()
+    withdraw_form = WalletWithdrawForm(wallet=wallet)
+
+    context = _nav_context(request)
+    context.update(
+        {
+            "wallet": wallet,
+            "holdings": wallet.holdings.select_related("currency").filter(amount__gt=0),
+            "deposit_form": deposit_form,
+            "withdraw_form": withdraw_form,
+            "test_deposit_amount": TEST_DEPOSIT_AMOUNT,
+            "test_withdraw_amount": TEST_WITHDRAW_AMOUNT,
+            "transactions": wallet.transactions.select_related("currency")[:20],
+        }
+    )
+    return render(request, "core/wallet.html", context)
+
+
+@role_required(role_lib.USER)
+def wallet_deposit(request):
+    if request.method == "POST":
+        wallet = _get_wallet(request.user)
+        form = WalletDepositForm(request.POST)
+        if form.is_valid():
+            amount = form.cleaned_data["amount"]
+            with transaction.atomic():
+                wallet.usd_balance += amount
+                wallet.save(update_fields=["usd_balance", "updated_at"])
+                WalletTransaction.objects.create(
+                    wallet=wallet,
+                    kind=WalletTransaction.DEPOSIT,
+                    amount=amount,
+                    usd_amount=amount,
+                    note="Carga de saldo",
+                )
+            messages.success(request, f"Se cargaron ${amount} a tu saldo.")
+        else:
+            messages.error(request, "Monto inválido. " + " ".join(form.errors.get("amount", [])))
+    return redirect("wallet")
+
+
+@role_required(role_lib.USER)
+def wallet_deposit_test(request):
+    """One-click test button: adds a fixed demo amount to the USD balance."""
+    if request.method == "POST":
+        wallet = _get_wallet(request.user)
+        with transaction.atomic():
+            wallet.usd_balance += TEST_DEPOSIT_AMOUNT
+            wallet.save(update_fields=["usd_balance", "updated_at"])
+            WalletTransaction.objects.create(
+                wallet=wallet,
+                kind=WalletTransaction.DEPOSIT,
+                amount=TEST_DEPOSIT_AMOUNT,
+                usd_amount=TEST_DEPOSIT_AMOUNT,
+                note="Carga de saldo de prueba",
+            )
+        messages.success(request, f"Se cargaron ${TEST_DEPOSIT_AMOUNT} de prueba a tu saldo.")
+    return redirect("wallet")
+
+
+@role_required(role_lib.USER)
+def wallet_withdraw(request):
+    if request.method == "POST":
+        wallet = _get_wallet(request.user)
+        form = WalletWithdrawForm(request.POST, wallet=wallet)
+        if form.is_valid():
+            currency = form.cleaned_data["currency"]
+            amount = form.cleaned_data["amount"]
+            holding = wallet.holdings.filter(currency=currency).first()
+            if not holding or holding.amount < amount:
+                messages.error(request, f"No tienes suficiente saldo de {currency.code} para retirar esa cantidad.")
+            else:
+                with transaction.atomic():
+                    holding.amount -= amount
+                    holding.save(update_fields=["amount"])
+                    WalletTransaction.objects.create(
+                        wallet=wallet,
+                        kind=WalletTransaction.WITHDRAW,
+                        currency=currency,
+                        amount=amount,
+                        usd_amount=(amount * currency.value_in_usd).quantize(Decimal("0.01")),
+                        rate_used=currency.value_in_usd,
+                        note="Retiro de divisa",
+                    )
+                messages.success(request, f"Retiraste {amount} {currency.code} de tu billetera.")
+        else:
+            messages.error(request, "Revisa el formulario de retiro.")
+    return redirect("wallet")
+
+
+@role_required(role_lib.USER)
+def wallet_withdraw_test(request, currency_id):
+    """One-click test button: withdraws a small fixed demo amount of one currency."""
+    if request.method == "POST":
+        wallet = _get_wallet(request.user)
+        currency = get_object_or_404(Currency, pk=currency_id)
+        holding = wallet.holdings.filter(currency=currency).first()
+        if not holding or holding.amount <= 0:
+            messages.error(request, f"No tienes saldo de {currency.code} para retirar.")
+        else:
+            amount = min(holding.amount, TEST_WITHDRAW_AMOUNT)
+            with transaction.atomic():
+                holding.amount -= amount
+                holding.save(update_fields=["amount"])
+                WalletTransaction.objects.create(
+                    wallet=wallet,
+                    kind=WalletTransaction.WITHDRAW,
+                    currency=currency,
+                    amount=amount,
+                    usd_amount=(amount * currency.value_in_usd).quantize(Decimal("0.01")),
+                    rate_used=currency.value_in_usd,
+                    note="Retiro de prueba",
+                )
+            messages.success(request, f"Retiraste {amount} {currency.code} (prueba) de tu billetera.")
+    return redirect("wallet")
+
+
 @role_required(role_lib.USER)
 def trade(request):
-    """Where a user will buy and sell currencies. Placeholder for a future sprint."""
-    return render(request, "core/trade.html", _nav_context(request))
+    """A user buys currencies for their personal wallet using their USD balance."""
+    wallet = _get_wallet(request.user)
+
+    if request.method == "POST":
+        form = CurrencyBuyForm(request.POST)
+        if form.is_valid():
+            currency = form.cleaned_data["currency"]
+            usd_amount = form.cleaned_data["usd_amount"]
+            if usd_amount > wallet.usd_balance:
+                messages.error(request, "No tienes saldo suficiente en USD para esta compra.")
+            else:
+                currency_amount = (usd_amount / currency.value_in_usd).quantize(
+                    Decimal("0.000001"), rounding=ROUND_DOWN
+                )
+                with transaction.atomic():
+                    wallet.usd_balance -= usd_amount
+                    wallet.save(update_fields=["usd_balance", "updated_at"])
+                    holding, _ = wallet.holdings.get_or_create(currency=currency)
+                    holding.amount += currency_amount
+                    holding.save(update_fields=["amount"])
+                    WalletTransaction.objects.create(
+                        wallet=wallet,
+                        kind=WalletTransaction.BUY,
+                        currency=currency,
+                        amount=currency_amount,
+                        usd_amount=usd_amount,
+                        rate_used=currency.value_in_usd,
+                        note="Compra de divisa",
+                    )
+                messages.success(
+                    request, f"Compraste {currency_amount} {currency.code} por ${usd_amount}."
+                )
+                return redirect("trade")
+    else:
+        form = CurrencyBuyForm()
+
+    context = _nav_context(request)
+    context.update({"form": form, "wallet": wallet})
+    return render(request, "core/trade.html", context)
+
+
+# --- Admin/manager: currency CRUD ---------------------------------------
 
 
 @role_required(role_lib.ADMIN, role_lib.MANAGER)
 def currency_management(request):
-    """Where a manager will set the value of certain currencies. Future capability."""
-    return render(request, "core/currency_management.html", _nav_context(request))
+    context = _nav_context(request)
+    context["currencies"] = Currency.objects.all()
+    return render(request, "core/currency_management.html", context)
+
+
+@role_required(role_lib.ADMIN, role_lib.MANAGER)
+def currency_create(request):
+    if request.method == "POST":
+        form = CurrencyForm(request.POST)
+        if form.is_valid():
+            currency = form.save()
+            messages.success(request, f"Divisa {currency.code} creada.")
+            return redirect("currency_management")
+    else:
+        form = CurrencyForm()
+
+    context = _nav_context(request)
+    context.update({"form": form, "mode": "create"})
+    return render(request, "core/currency_form.html", context)
+
+
+@role_required(role_lib.ADMIN, role_lib.MANAGER)
+def currency_edit(request, currency_id):
+    currency = get_object_or_404(Currency, pk=currency_id)
+    if request.method == "POST":
+        form = CurrencyForm(request.POST, instance=currency)
+        if currency.is_base:
+            form.fields["code"].disabled = True
+            form.fields["value_in_usd"].disabled = True
+        if form.is_valid():
+            form.save()
+            messages.success(request, f"Divisa {currency.code} actualizada.")
+            return redirect("currency_management")
+    else:
+        form = CurrencyForm(instance=currency)
+        if currency.is_base:
+            form.fields["code"].disabled = True
+            form.fields["value_in_usd"].disabled = True
+
+    context = _nav_context(request)
+    context.update({"form": form, "mode": "edit", "currency": currency})
+    return render(request, "core/currency_form.html", context)
+
+
+@role_required(role_lib.ADMIN, role_lib.MANAGER)
+def currency_delete(request, currency_id):
+    currency = get_object_or_404(Currency, pk=currency_id)
+    if currency.is_base:
+        messages.error(request, "No puedes eliminar la divisa universal (USD).")
+        return redirect("currency_management")
+
+    if request.method == "POST":
+        try:
+            currency.delete()
+        except ProtectedError:
+            messages.error(
+                request,
+                f"No se puede eliminar {currency.code}: hay billeteras con saldo o movimientos en esa divisa.",
+            )
+        else:
+            messages.success(request, f"Divisa {currency.code} eliminada.")
+        return redirect("currency_management")
+
+    context = _nav_context(request)
+    context["currency"] = currency
+    return render(request, "core/currency_confirm_delete.html", context)
 
 
 # --- Admin: user management tab -----------------------------------------

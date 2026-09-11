@@ -1,0 +1,28 @@
+{% extends 'core/base.html' %}
+{% block title %}Exchange Pro | Divisas{% endblock %}
+{% block content %}
+  <div class="card stack">
+    <div>
+      {% if mode == 'create' %}
+        <h1>Nueva divisa</h1>
+      {% else %}
+        <h1>Editar {{ currency.code }}</h1>
+        {% if currency.is_base %}<p class="muted">USD es la divisa universal: su código y valor están fijos en 1.000000.</p>{% endif %}
+      {% endif %}
+    </div>
+
+    <form method="post">
+      {% csrf_token %}
+      {% for field in form %}
+        <div class="field">
+          <label>{{ field.label }}</label>
+          {{ field }}
+          {% if field.help_text %}<span class="helptext">{{ field.help_text }}</span>{% endif %}
+          {{ field.errors }}
+        </div>
+      {% endfor %}
+      <button class="btn btn-primary" type="submit">Guardar</button>
+      <a class="btn btn-secondary" href="{% url 'currency_management' %}">Cancelar</a>
+    </form>
+  </div>
+{% endblock %}
