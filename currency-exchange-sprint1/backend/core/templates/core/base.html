@@ -31,6 +31,11 @@
       .errorlist { margin: 0; color: var(--danger); }
       footer { padding: 24px; text-align: center; color: #6b7280; }
       .nav-actions { display: flex; gap: 12px; flex-wrap: wrap; }
+      table { width: 100%; border-collapse: collapse; }
+      th, td { text-align: left; padding: 10px 12px; border-bottom: 1px solid #e5e7eb; font-size: 14px; }
+      th { color: #6b7280; font-weight: 600; }
+      .tag { display: inline-block; padding: 2px 8px; border-radius: 999px; background: #e0f2f1; color: #0f766e; font-size: 12px; margin-right: 4px; }
+      .checkbox-list { list-style: none; padding: 0; margin: 0; display: grid; gap: 8px; }
     </style>
   </head>
   <body>
@@ -40,6 +45,9 @@
         <a href="/">Inicio</a>
         {% if user.is_authenticated %}
           <a href="/dashboard/">Panel</a>
+          {% if can_trade %}<a href="/trade/">Comprar / Vender</a>{% endif %}
+          {% if can_manage_currencies %}<a href="/currencies/">Divisas</a>{% endif %}
+          {% if can_manage_users %}<a href="/manage/users/">Usuarios</a>{% endif %}
           <a href="/account/">Cuenta</a>
           <a href="/logout/">Cerrar sesión</a>
         {% else %}
