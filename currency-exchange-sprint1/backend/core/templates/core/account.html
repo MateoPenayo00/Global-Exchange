@@ -1,25 +1,25 @@
 {% extends 'core/base.html' %}
-{% block title %}Exchange Pro | Account{% endblock %}
+{% block title %}Exchange Pro | Cuenta{% endblock %}
 {% block content %}
   <div class="card stack">
     <div>
-      <h1>Account</h1>
-      <p class="muted">This account is managed by Keycloak, which is the identity system for the project.</p>
+      <h1>Cuenta</h1>
+      <p class="muted">Esta cuenta está gestionada por Keycloak, que es el sistema de identidad del proyecto.</p>
     </div>
 
     <div>
-      <p><strong>Display name:</strong> {{ profile_name }}</p>
-      <p><strong>Email:</strong> {{ profile_email|default:'Not available yet' }}</p>
-      <p><strong>Username:</strong> {{ user.get_username }}</p>
+      <p><strong>Nombre visible:</strong> {{ profile_name }}</p>
+      <p><strong>Correo:</strong> {{ profile_email|default:'No disponible todavía' }}</p>
+      <p><strong>Nombre de usuario:</strong> {{ user.get_username }}</p>
     </div>
 
     <div>
-      <p>You can return to the dashboard or proceed to the deletion flow. The deletion flow will remove the matching Keycloak user account using the admin API service account configured for this project.</p>
+      <p>Puedes volver al panel o continuar con el flujo de eliminación. El flujo de eliminación borrará la cuenta correspondiente en Keycloak usando la cuenta de servicio del admin API configurada para este proyecto.</p>
     </div>
 
     <div>
-      <a class="btn btn-primary" href="/dashboard/">Back to dashboard</a>
-      <a class="btn btn-danger" href="/delete-account/">Delete account</a>
+      <a class="btn btn-primary" href="/dashboard/">Volver al panel</a>
+      <a class="btn btn-danger" href="/delete-account/">Eliminar cuenta</a>
     </div>
   </div>
 {% endblock %}

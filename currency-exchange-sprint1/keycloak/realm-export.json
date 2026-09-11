@@ -1,6 +1,12 @@
 {
   "realm": "exchange-learning",
   "enabled": true,
+  "internationalizationEnabled": true,
+  "supportedLocales": ["es"],
+  "defaultLocale": "es",
+  "loginTheme": "keycloak",
+  "accountTheme": "keycloak",
+  "adminTheme": "keycloak",
   "registrationAllowed": true,
   "rememberMe": true,
   "loginWithEmailAllowed": true,
@@ -13,29 +19,49 @@
       "name": "Exchange Pro Web App",
       "enabled": true,
       "publicClient": false,
-      "secret": "WBs6lBL-hUn6cny_nsiWFygNvABtSrLDje9Rea6HwTE",
+      "secret": "change-me-web-secret",
       "standardFlowEnabled": true,
       "directAccessGrantsEnabled": false,
       "serviceAccountsEnabled": false,
       "protocol": "openid-connect",
+      "rootUrl": "http://192.168.100.13",
+      "baseUrl": "/",
       "redirectUris": [
-        "http://192.168.100.13/oidc/*",
-        "http://localhost/oidc/*"
+        "http://localhost/oidc/*",
+        "http://127.0.0.1/oidc/*",
+        "http://192.168.100.13/oidc/*"
       ],
       "webOrigins": [
-        "http://192.168.100.13",
-        "http://localhost"
+        "http://localhost",
+        "http://127.0.0.1",
+        "http://192.168.100.13"
       ],
       "attributes": {
-        "post.logout.redirect.uris": "http://192.168.100.13/,http://localhost/"
-      }
+        "post.logout.redirect.uris": "http://localhost/|http://127.0.0.1/|http://192.168.100.13/"
+      },
+      "protocolMappers": [
+        {
+          "name": "realm roles",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-usermodel-realm-role-mapper",
+          "consentRequired": false,
+          "config": {
+            "multivalued": "true",
+            "claim.name": "realm_access.roles",
+            "jsonType.label": "String",
+            "userinfo.token.claim": "true",
+            "id.token.claim": "true",
+            "access.token.claim": "true"
+          }
+        }
+      ]
     },
     {
       "clientId": "exchange-admin-api",
       "name": "Exchange Pro Admin API",
       "enabled": true,
       "publicClient": false,
-      "secret": "mxGQlUTR3fUIQmzbUIc_f4keMBBn-838U_kM2y7_ZhE",
+      "secret": "change-me-admin-secret",
       "standardFlowEnabled": false,
       "directAccessGrantsEnabled": false,
       "serviceAccountsEnabled": true,
@@ -50,16 +76,48 @@
   "roles": {
     "realm": [
       {
-        "name": "customer",
-        "description": "Standard customer role"
+        "name": "admin",
+        "description": "Crea, gestiona y elimina usuarios; incluye las capacidades de gestor."
       },
       {
-        "name": "admin",
-        "description": "Administrative role"
+        "name": "manager",
+        "description": "Gestiona el valor de ciertas divisas (capacidad futura)."
+      },
+      {
+        "name": "user",
+        "description": "Compra y vende divisas."
+      },
+      {
+        "name": "customer",
+        "description": "Rol heredado, equivalente a user."
       }
     ]
   },
   "users": [
+    {
+      "username": "demo.admin",
+      "enabled": true,
+      "emailVerified": true,
+      "firstName": "Demo",
+      "lastName": "Admin",
+      "email": "demo.admin@example.com",
+      "credentials": [
+        {"type": "password", "value": "ChangeMe123!", "temporary": false}
+      ],
+      "realmRoles": ["admin"]
+    },
+    {
+      "username": "demo.manager",
+      "enabled": true,
+      "emailVerified": true,
+      "firstName": "Demo",
+      "lastName": "Manager",
+      "email": "demo.manager@example.com",
+      "credentials": [
+        {"type": "password", "value": "ChangeMe123!", "temporary": false}
+      ],
+      "realmRoles": ["manager"]
+    },
     {
       "username": "demo.customer",
       "enabled": true,
@@ -68,13 +126,9 @@
       "lastName": "Customer",
       "email": "demo.customer@example.com",
       "credentials": [
-        {
-          "type": "password",
-          "value": "ChangeMe123!",
-          "temporary": false
-        }
+        {"type": "password", "value": "ChangeMe123!", "temporary": false}
       ],
-      "realmRoles": ["customer"]
+      "realmRoles": ["user"]
     },
     {
       "username": "service-account-exchange-admin-api",
@@ -83,9 +137,7 @@
       "serviceAccountClientId": "exchange-admin-api",
       "clientRoles": {
         "realm-management": [
-          "manage-users",
-          "view-users",
-          "query-users"
+          "realm-admin"
         ]
       }
     }

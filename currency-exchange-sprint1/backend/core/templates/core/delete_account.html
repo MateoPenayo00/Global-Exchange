@@ -1,20 +1,20 @@
 {% extends 'core/base.html' %}
-{% block title %}Exchange Pro | Delete Account{% endblock %}
+{% block title %}Exchange Pro | Eliminar cuenta{% endblock %}
 {% block content %}
   <div class="card stack">
     <div>
-      <h1 class="danger">Delete account</h1>
-      <p class="muted">This action will delete the matching account in Keycloak. This is permanent and removes access to the application.</p>
+      <h1 class="danger">Eliminar cuenta</h1>
+      <p class="muted">Esta acción eliminará la cuenta correspondiente en Keycloak. Es permanente y quitará el acceso a la aplicación.</p>
     </div>
 
     <div>
-      <p><strong>Display name:</strong> {{ profile_name }}</p>
-      <p><strong>Email:</strong> {{ profile_email|default:'Not available yet' }}</p>
+      <p><strong>Nombre visible:</strong> {{ profile_name }}</p>
+      <p><strong>Correo:</strong> {{ profile_email|default:'No disponible todavía' }}</p>
     </div>
 
     <div>
-      <p>To avoid accidental deletion, type <strong>DELETE</strong> below and submit the form.</p>
-      <p class="muted">The form performs a strict confirmation check, and the server then calls the Keycloak admin API using the dedicated service account.</p>
+      <p>Para evitar eliminaciones accidentales, escribe <strong>DELETE</strong> abajo y envía el formulario.</p>
+      <p class="muted">El formulario hace una comprobación estricta y después el servidor llama al admin API de Keycloak usando la cuenta de servicio dedicada.</p>
     </div>
 
     <form method="post">
@@ -29,8 +29,8 @@
         {{ form.confirmation.errors }}
       </div>
       <div>
-        <button type="submit" class="btn btn-danger">Confirm deletion</button>
-        <a class="btn btn-secondary" href="/account/">Cancel</a>
+        <button type="submit" class="btn btn-danger">Confirmar eliminación</button>
+        <a class="btn btn-secondary" href="/account/">Cancelar</a>
       </div>
     </form>
   </div>

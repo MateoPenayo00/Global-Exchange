@@ -1,0 +1,28 @@
+{% extends 'core/base.html' %}
+{% block title %}Exchange Pro | Comprar divisas{% endblock %}
+{% block content %}
+  <div class="card stack">
+    <div>
+      <h1>Comprar divisas</h1>
+      <p class="muted">Usa tu saldo en USD para comprar divisas hacia tu billetera personal.</p>
+    </div>
+
+    <div>
+      <p><strong>Saldo disponible:</strong> ${{ wallet.usd_balance }} USD</p>
+    </div>
+
+    <form method="post">
+      {% csrf_token %}
+      {% for field in form %}
+        <div class="field">
+          <label>{{ field.label }}</label>
+          {{ field }}
+          {% if field.help_text %}<span class="helptext">{{ field.help_text }}</span>{% endif %}
+          {{ field.errors }}
+        </div>
+      {% endfor %}
+      <button class="btn btn-primary" type="submit">Comprar</button>
+      <a class="btn btn-secondary" href="{% url 'wallet' %}">Ver mi billetera</a>
+    </form>
+  </div>
+{% endblock %}

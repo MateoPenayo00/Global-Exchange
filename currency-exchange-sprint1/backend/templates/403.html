@@ -1,0 +1,9 @@
+{% extends 'core/base.html' %}
+{% block title %}Exchange Pro | Sin permiso{% endblock %}
+{% block content %}
+  <div class="card stack">
+    <h1>Acceso denegado</h1>
+    <p class="muted">{{ exception|default:'No tienes permisos para acceder a esta sección.' }}</p>
+    <a class="btn btn-primary" href="/dashboard/">Volver al panel</a>
+  </div>
+{% endblock %}
