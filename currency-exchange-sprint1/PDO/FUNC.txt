@@ -1,0 +1,335 @@
+======================================================================
+FUNC.txt - Funciones de Django detrás de cada botón/acción de Exchange Pro
+Generado: 11 de septiembre de 2026
+Fuente: backend/core/ (views.py, forms.py, models.py, roles.py, backends.py,
+services/keycloak_admin.py, admin.py, context_processors.py, middleware.py)
+y backend/config/urls.py
+======================================================================
+
+Este documento recorre, botón por botón y comando por comando, qué
+función de Django se ejecuta y qué hace. Está pensado para que alguien
+que no escribió el código pueda seguir el rastro de "toqué este botón
+en la web -> esto es lo que corrió en el servidor".
+
+----------------------------------------------------------------------
+0) CÓMO ESTÁ ORGANIZADO EL BACKEND
+----------------------------------------------------------------------
+- config/urls.py: mapea cada URL a una función de core/views.py. Es el
+  punto de entrada: acá se busca primero para saber "esta pantalla,
+  ¿qué view dispara?".
+- core/views.py: una función por pantalla o por acción de botón/form.
+  Casi todas devuelven un render() (dibujan una plantilla HTML) o un
+  redirect() (mandan al navegador a otra URL).
+- core/forms.py: valida los datos que vienen de cada formulario antes
+  de que la view los use (montos, códigos de divisa, contraseñas, etc.).
+- core/models.py: las tablas de la base de datos (Currency, Wallet,
+  WalletHolding, WalletTransaction) y su lógica mínima (por ejemplo,
+  que USD siempre valga 1).
+- core/roles.py: funciones para saber qué puede hacer cada usuario
+  (admin / manager / user), en base a los "grupos" de Django que se
+  sincronizan con los roles de Keycloak.
+- core/backends.py: qué pasa en el login/registro vía Keycloak (OIDC).
+- core/services/keycloak_admin.py: funciones que hablan con la API de
+  administración de Keycloak (crear/borrar usuarios, asignar roles)
+  desde la pestaña de administración de usuarios.
+- core/admin.py: configura el panel /django-admin/ (el admin interno
+  de Django, para inspeccionar datos directamente, no la pestaña de
+  "Usuarios" de la app).
+- core/context_processors.py y core/middleware.py: código que corre en
+  TODAS las páginas, no solo cuando se aprieta un botón puntual (ver
+  secciones 8 y 9).
+
+Decorador clave: role_required(*roles) (views.py, línea ~33). Envuelve
+una view para que:
+  1) exija estar logueado (login_required de Django), y
+  2) exija que el usuario tenga al menos uno de los roles indicados
+     (role_lib.has_role), si no, corta con PermissionDenied (error 403,
+     ver templates/403.html).
+_nav_context(request) es una función auxiliar que arma el diccionario
+común que casi todas las plantillas necesitan para dibujar el menú
+(nombre del usuario, roles, qué pestañas mostrar).
+
+----------------------------------------------------------------------
+1) PÁGINA DE INICIO Y NAVEGACIÓN GENERAL
+----------------------------------------------------------------------
+Botón/enlace "Inicio" (base.html, cualquier página)
+  URL: /            Función: views.home
+  Solo dibuja core/home.html. No requiere login. Si el usuario ya está
+  logueado, la plantilla muestra "Ir al panel" / "Página de cuenta"; si
+  no, muestra "Iniciar sesión" / "Crear cuenta".
+
+Botón "Ir al panel" / "Panel" (home.html, base.html)
+  URL: /dashboard/     Función: views.dashboard
+  Requiere login (@login_required). Arma el contexto de navegación con
+  _nav_context() y dibuja core/dashboard.html, que muestra únicamente
+  los enlaces a las secciones que el rol del usuario le permite usar
+  (comprar/vender divisas, gestionar divisas, gestionar usuarios).
+
+Botón "Página de cuenta" / "Cuenta" (home.html, dashboard.html, base.html)
+  URL: /account/     Función: views.account
+  Requiere login. Solo dibuja core/account.html con los datos del
+  usuario (nombre, correo, roles).
+
+----------------------------------------------------------------------
+2) LOGIN, REGISTRO Y LOGOUT (vía Keycloak)
+----------------------------------------------------------------------
+Botón "Iniciar sesión" (home.html, base.html)
+  URL: /login/     Función: views.login_view
+  No hace login por sí misma: redirige a
+  reverse("oidc_authentication_init"), la vista que trae la librería
+  mozilla-django-oidc (registrada en config/urls.py vía
+  include("mozilla_django_oidc.urls")). Esa vista arma la URL de
+  autorización de Keycloak y redirige al navegador ahí; Keycloak
+  muestra su propio formulario de login.
+
+Botón "Registrarse" / "Crear cuenta" (home.html, base.html)
+  URL: /register/     Función: views.register_view
+  Igual que login_view, pero agrega ?kc_action=register a la URL de
+  autorización de Keycloak, lo que hace que Keycloak abra directamente
+  su formulario de "Crear cuenta" en lugar del de login.
+
+Qué pasa después de que Keycloak devuelve al usuario (no es un botón,
+es el paso automático que sigue a loguearse o registrarse):
+  KeycloakOIDCAuthenticationBackend (core/backends.py) es la pieza que
+  mozilla-django-oidc llama para completar el login:
+  - get_token() / get_userinfo(): piden el token y los datos del
+    usuario a Keycloak, forzando el header Host correcto (ver el
+    comentario en _issuer_host_header) para que Keycloak no rechace el
+    token por "Invalid token issuer".
+  - get_username(claims): decide el nombre de usuario en Django,
+    prefiriendo preferred_username, si no email, si no el sub del
+    token.
+  - filter_users_by_claims(claims): busca si ya existe un User de
+    Django con ese username o email, para no duplicar cuentas.
+  - create_user(claims) / update_user(user, claims): crean o
+    actualizan el User de Django con nombre, apellido, correo, y
+    llaman a roles_from_claims() (core/roles.py) para leer los roles
+    de Keycloak (realm_access.roles) del token.
+    * Si el usuario se autorregistró y todavía no tiene ningún rol,
+      se llama a KeycloakAdminClient.ensure_default_role() (ver
+      sección 6) para asignarle el rol "user" en Keycloak, y se vuelve
+      a leer el rol recién asignado.
+    * user.is_staff / user.is_superuser se activan si el rol incluye
+      "admin" (esto es lo que habilita /django-admin/ para un admin).
+    * _sync_groups(): agrega o saca al usuario de los grupos de Django
+      admin/manager/user según los roles que trajo Keycloak. Estos
+      grupos son los que después consulta core/roles.py.
+
+Botón "Cerrar sesión" (dashboard.html, base.html)
+  URL: /logout/     Función: views.logout_view
+  Cierra la sesión de Django (logout(request)) y además redirige al
+  endpoint de logout de Keycloak (para que Keycloak también invalide
+  su propia sesión), pasando el id_token guardado y una URL de vuelta
+  a "/". Si no había id_token guardado, redirige directo a
+  settings.LOGOUT_REDIRECT_URL.
+
+Botón "Eliminar cuenta" (account.html) y "Confirmar eliminación"
+(delete_account.html)
+  URL: /delete-account/     Función: views.delete_account_view
+  - GET: muestra el formulario DeleteAccountForm (core/forms.py), que
+    exige escribir la palabra "DELETE" para confirmar
+    (clean_confirmation).
+  - POST (botón "Confirmar eliminación"): si el formulario es válido,
+    llama a KeycloakAdminClient.delete_django_user_account(request.user)
+    (sección 6), que busca la cuenta en Keycloak por email/username y
+    la borra. Si tiene éxito, cierra la sesión de Django (logout) y
+    muestra core/account_deleted.html.
+
+----------------------------------------------------------------------
+3) BILLETERA DEL USUARIO (rol "user")
+----------------------------------------------------------------------
+Todas las views de esta sección están protegidas con
+@role_required(role_lib.USER) y usan _get_wallet(user), que trae o
+crea (get_or_create) la Wallet de ese usuario si todavía no existe.
+
+Pestaña "Mi billetera" (menú superior)
+  URL: /wallet/     Función: views.wallet_view
+  Solo lectura: junta la billetera, las tenencias con saldo > 0
+  (holdings), los formularios vacíos de carga/retiro y las últimas 20
+  transacciones (wallet.transactions...[:20]), y dibuja core/wallet.html.
+
+Botón "Cargar saldo" (formulario de monto, wallet.html)
+  URL: POST /wallet/deposit/     Función: views.wallet_deposit
+  Valida el monto con WalletDepositForm (mínimo 0.01 USD). Si es
+  válido, dentro de una transacción atómica de base de datos
+  (transaction.atomic()): suma el monto a wallet.usd_balance y crea un
+  registro WalletTransaction de tipo "deposit" para el historial.
+  Redirige de nuevo a /wallet/ mostrando un mensaje de éxito o error
+  (django.contrib.messages).
+
+Botón "Cargar $100 de prueba" (wallet.html)
+  URL: POST /wallet/deposit/test/     Función: views.wallet_deposit_test
+  Igual que el anterior pero sin formulario: siempre suma el monto fijo
+  TEST_DEPOSIT_AMOUNT = 100.00 USD. Pensado para probar el flujo sin
+  tener que escribir un monto.
+
+Botón "Retirar" (formulario de retiro real, wallet.html)
+  URL: POST /wallet/withdraw/     Función: views.wallet_withdraw
+  Usa WalletWithdrawForm (solo deja elegir divisas que el usuario
+  realmente tiene en su billetera). Si el monto pedido es mayor al que
+  tiene esa tenencia, muestra error; si no, resta el monto de la
+  holding y crea un WalletTransaction de tipo "withdraw", guardando
+  también el tipo de cambio usado (rate_used) y el equivalente en USD.
+
+Botón "Retirar (prueba)" (uno por cada divisa que el usuario tiene,
+wallet.html)
+  URL: POST /wallet/withdraw/<currency_id>/test/
+  Función: views.wallet_withdraw_test
+  Retira un monto de prueba fijo (TEST_WITHDRAW_AMOUNT = 1.000000
+  unidades) o todo el saldo disponible si es menor a eso (min()), de la
+  divisa indicada en la URL. También queda registrado como
+  WalletTransaction.
+
+----------------------------------------------------------------------
+4) COMPRA DE DIVISAS (rol "user")
+----------------------------------------------------------------------
+Pestaña "Comprar divisas" / botón "Comprar" (trade.html)
+  URL: /trade/ (GET dibuja el formulario, POST procesa la compra)
+  Función: views.trade
+  - GET: dibuja CurrencyBuyForm vacío (solo lista divisas activas,
+    excluyendo USD, para comprar).
+  - POST ("Comprar"): valida el formulario; si el usuario no tiene
+    saldo en USD suficiente, muestra error. Si tiene, calcula cuánta
+    divisa le corresponde (usd_amount / value_in_usd), redondeando
+    siempre hacia abajo (ROUND_DOWN) para no regalar centavos, resta el
+    USD de la billetera, suma (o crea) la holding de esa divisa
+    (get_or_create) y registra un WalletTransaction de tipo "buy" con
+    la tasa usada. Todo dentro de una transacción atómica.
+
+----------------------------------------------------------------------
+5) GESTIÓN DE DIVISAS (roles "admin" y "manager")
+----------------------------------------------------------------------
+Protegidas con @role_required(role_lib.ADMIN, role_lib.MANAGER).
+
+Pestaña "Divisas" (menú)
+  URL: /currencies/     Función: views.currency_management
+  Lista todas las Currency existentes (currency_management.html).
+
+Botón "Nueva divisa"
+  URL: /currencies/new/     Función: views.currency_create
+  GET: formulario vacío CurrencyForm. POST ("Guardar"): valida (código
+  se pasa a mayúsculas, valor en USD debe ser > 0) y crea la Currency;
+  redirige a la lista con mensaje de éxito.
+
+Enlace "Editar valor" (por cada divisa en la lista)
+  URL: /currencies/<id>/edit/     Función: views.currency_edit
+  Igual que currency_create pero sobre una instancia existente
+  (form = CurrencyForm(..., instance=currency)). Si la divisa es la
+  base (USD, currency.is_base), los campos "código" y "valor en USD"
+  se deshabilitan en el formulario para que no se puedan tocar (USD
+  siempre vale 1, ver models.Currency.save()).
+
+Enlace "Eliminar" / botón "Sí, eliminar"
+  URL: /currencies/<id>/delete/     Función: views.currency_delete
+  GET: pide confirmación (currency_confirm_delete.html). Si la divisa
+  es la base (USD), corta antes con un mensaje de error: no se puede
+  eliminar. POST ("Sí, eliminar"): intenta currency.delete(); si hay
+  billeteras u operaciones que todavía referencian esa divisa,
+  Django lanza ProtectedError (por el on_delete=PROTECT en los modelos
+  WalletHolding/WalletTransaction) y la view lo atrapa para mostrar un
+  mensaje claro en vez de un error 500.
+
+----------------------------------------------------------------------
+6) GESTIÓN DE USUARIOS (rol "admin", vía API de Keycloak)
+----------------------------------------------------------------------
+Protegidas con @role_required(role_lib.ADMIN). Todas usan
+KeycloakAdminClient (core/services/keycloak_admin.py), que habla
+directamente con la API de administración de Keycloak (no con la base
+de datos de Django) usando un token de "client credentials"
+(_admin_access_token) que se cachea en memoria mientras dura el
+request.
+
+Pestaña "Usuarios" / caja de búsqueda + botón "Buscar"
+  URL: /manage/users/     Función: views.admin_users
+  Llama a client.list_users(search) que trae todos los usuarios de
+  Keycloak (o filtrados por el texto de "q") y, para cada uno, sus
+  roles de realm (_user_realm_roles), armando una lista de
+  KeycloakUserRecord para pintar la tabla.
+
+Botón "Nuevo usuario"
+  URL: /manage/users/new/     Función: views.admin_user_create
+  GET: formulario AdminUserForm (usuario, correo, nombre, apellido,
+  contraseña inicial de al menos 8 caracteres, casilla "pedir cambio de
+  contraseña", checkboxes de roles). POST ("Guardar"): llama a
+  client.create_user(...), que:
+    1) crea el usuario en Keycloak (POST /admin/realms/.../users),
+    2) lee el id del usuario nuevo de la cabecera Location de la
+       respuesta,
+    3) llama a set_user_roles() para asignarle los roles marcados.
+
+Enlace "Roles" (por usuario, en la tabla)
+  URL: /manage/users/<id>/roles/     Función: views.admin_user_roles
+  GET: trae el usuario (client.get_user) y sus roles actuales
+  (client.get_user_roles) para prellenar AdminUserRolesForm. POST
+  ("Guardar"): client.set_user_roles(user_id, roles_marcados) calcula
+  qué roles hay que agregar y cuáles sacar comparando lo pedido contra
+  lo que el usuario ya tenía, y hace un DELETE + POST contra
+  role-mappings/realm en Keycloak para dejarlo exactamente como se
+  marcó en los checkboxes.
+
+Enlace "Eliminar" / botón "Sí, eliminar" (por usuario)
+  URL: /manage/users/<id>/delete/     Función: views.admin_user_delete
+  No deja que un admin se borre a sí mismo desde este panel (compara
+  kc_user["username"] contra request.user.get_username()). Si no es el
+  mismo usuario, POST ("Sí, eliminar") llama a
+  client.delete_user_by_id(user_id) (DELETE contra la API de Keycloak).
+
+----------------------------------------------------------------------
+7) COMANDOS DE TERMINAL (no son botones, pero disparan funciones)
+----------------------------------------------------------------------
+docker compose up -d --build
+  Levanta todo el stack (nginx, web, keycloak, las dos bases postgres).
+  El contenedor "web" corre, al arrancar (ver docker-compose.yml):
+  "python manage.py migrate --noinput && gunicorn config.wsgi:application".
+
+python manage.py migrate
+  Aplica las migraciones de Django, es decir, crea/actualiza las tablas
+  de la base de datos a partir de los modelos de core/models.py
+  (Currency, Wallet, WalletHolding, WalletTransaction) y las propias de
+  Django (usuarios, grupos, sesiones).
+
+python manage.py test core
+  Corre las 24 pruebas unitarias de backend/core/tests.py (ver PUN.txt
+  para el detalle completo de cada prueba y su salida).
+
+python manage.py createsuperuser
+  Crea un usuario administrador de Django directamente en la base de
+  datos (para entrar a /django-admin/), sin pasar por Keycloak.
+
+----------------------------------------------------------------------
+8) FUNCIONES QUE CORREN EN TODAS LAS PÁGINAS
+----------------------------------------------------------------------
+core.context_processors.roles(request)
+  Registrada como context processor en settings.py: se ejecuta antes
+  de dibujar CUALQUIER plantilla y agrega al contexto user_roles,
+  role_labels y los booleanos can_manage_users / can_manage_currencies
+  / can_trade. Es lo que usa base.html para decidir qué enlaces del
+  menú mostrar según el rol logueado, sin que cada view tenga que
+  repetir esa lógica (aunque varias views igual arman su propia copia
+  vía _nav_context(), por eso el menú se ve igual en todas partes).
+
+core.middleware.LocalhostAutoDetectMiddleware
+  Registrado como middleware en settings.py: se ejecuta en cada
+  request, antes de que llegue a la view. Calcula el host público
+  (scheme + host) que usó el navegador para esta request y actualiza en
+  caliente settings.SITE_URL, KEYCLOAK_PUBLIC_URL y las URLs de
+  autorización/logout de OIDC, para que el flujo de login funcione
+  tanto si se entra por "localhost" como por la IP de la máquina, sin
+  tener que hardcodear una sola URL en la configuración.
+
+----------------------------------------------------------------------
+9) PANEL /django-admin/ (admin interno de Django)
+----------------------------------------------------------------------
+Distinto de la pestaña "Usuarios" (que administra Keycloak): este es
+el admin autogenerado de Django, registrado en core/admin.py, y opera
+directamente sobre las tablas de la base de datos:
+- CurrencyAdmin: lista, busca y edita divisas (código, nombre, valor,
+  activa, última actualización).
+- WalletAdmin: lista billeteras (usuario, saldo en USD) con un inline
+  de sus WalletHolding (tenencias por divisa) editable en la misma
+  pantalla.
+- WalletTransactionAdmin: lista todas las transacciones, filtrable por
+  tipo (carga/compra/retiro) y por divisa, buscable por nombre de
+  usuario.
+Solo pueden entrar usuarios con is_staff=True, es decir, cuentas con
+rol "admin" (ver backends.py, sección 2).

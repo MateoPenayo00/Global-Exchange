@@ -1,0 +1,56 @@
+PDO — Documentación del proyecto (Project Documentation)
+==========================================================
+
+Esta carpeta reúne toda la documentación del proyecto Currency Exchange
+Sprint 1 que antes estaba repartida en la raíz del repositorio y en
+backend/core/ y docs/. Se excluyen PUN.txt, CHIA.txt y QA.txt, que
+quedan en la raíz del proyecto junto al resto del código.
+
+Cada documento original en inglés tiene ahora su traducción al español.
+El sufijo _EN indica el original en inglés; el sufijo _ES indica la
+traducción al español.
+
+Contenido:
+
+- README_EN.md / README_ES.md
+    El README principal del proyecto (qué incluye el stack, cómo
+    arrancarlo, flujos principales de usuario).
+
+- core-README_EN.md / core-README_ES.md
+    El README de la app "core" de Django: roles, creación de usuarios,
+    y el sistema de divisas y billeteras.
+
+- SECRETS_AND_STARTUP_GUIDE_EN.txt / SECRETS_AND_STARTUP_GUIDE_ES.txt
+    Guía corta de secretos, configuración y arranque del stack.
+
+- SECRETS_AND_STARTUP_GUIDE_DETAILED_EN.md /
+  SECRETS_AND_STARTUP_GUIDE_DETAILED_ES.md
+    Versión extendida de la guía anterior, con una explicación
+    archivo por archivo del proyecto.
+
+- SECRETS_AND_STARTUP_GUIDE_DETAILED_EN_stub.txt /
+  SECRETS_AND_STARTUP_GUIDE_DETAILED_ES_stub.txt
+    Notas cortas que indican que el contenido real vive en el .md y
+    en el PDF.
+
+- SECRETS_AND_STARTUP_GUIDE_DETAILED_EN.pdf
+    Versión en PDF (16 páginas) de la guía detallada, generada a
+    partir del .md en inglés. No se generó una versión en español de
+    este PDF porque este entorno no cuenta con herramientas de
+    generación de PDF (pandoc/wkhtmltopdf/weasyprint no están
+    instalados); el contenido completo en español está disponible en
+    SECRETS_AND_STARTUP_GUIDE_DETAILED_ES.md.
+
+- exchange-pro-access-guide_EN.html / exchange-pro-access-guide_ES.html
+    Página de referencia sobre el flujo de login/registro con
+    Keycloak, la consola de administración y una bitácora de los
+    bugs de "issuer mismatch" que se depuraron al integrar OIDC.
+    Nota: esta página quedó desactualizada en un punto (dice que los
+    roles de realm "todavía no se aplican en Django"); la versión en
+    español agrega una aclaración in situ de que eso ya no es así.
+
+Cómo se usa esta carpeta
+-------------------------
+Es documentación de referencia, no código: nada en la aplicación
+(vistas, plantillas, nginx, docker-compose) apunta a estos archivos,
+así que moverlos aquí no rompe el proyecto.

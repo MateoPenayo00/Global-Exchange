@@ -1,0 +1,72 @@
+CHIA.txt — Resumen rápido de esta sesión de trabajo
+=====================================================
+Proyecto: Currency Exchange Sprint 1 (Global-Exchange/currency-exchange-sprint1)
+Fecha: 10-11 de septiembre de 2026
+
+En esta sesión se avanzó el proyecto en cuatro etapas, sobre el stack ya
+existente (Django + Keycloak + PostgreSQL + Nginx, todo con Docker Compose):
+
+1) ROLES DE USUARIO (admin / manager / user)
+---------------------------------------------
+- Se agregaron tres roles de realm en Keycloak: admin, manager y user.
+- admin: crea, gestiona y elimina usuarios, además de heredar todo lo de manager.
+- manager: gestiona el valor de las divisas.
+- user: compra y vende divisas.
+- Un usuario autorregistrado (flujo normal "Registrarse") recibe el rol
+  "user" automáticamente en su primer login.
+- Se agregó una pestaña de administración de usuarios ("Usuarios") donde
+  un admin crea cuentas, les asigna roles y las elimina, todo contra el
+  Admin API de Keycloak.
+- Archivos clave: backend/core/roles.py, backend/core/backends.py,
+  backend/core/services/keycloak_admin.py, backend/core/views.py,
+  keycloak/realm-export.json.
+
+2) DIVISAS Y BILLETERA (CRUD + wallet)
+----------------------------------------
+- Se agregaron modelos reales a la base de datos: Currency, Wallet,
+  WalletHolding y WalletTransaction (backend/core/models.py).
+- USD es la "divisa universal": se siembra automáticamente, su valor
+  queda fijo en 1.000000 y no se puede eliminar.
+- admin y manager tienen un CRUD completo de divisas en /currencies/,
+  que es como suben o bajan el valor de cualquier divisa frente al dólar.
+- Los usuarios (rol user) tienen:
+    * /wallet/  — su billetera: saldo en USD, tenencias por divisa,
+      cargar saldo (con botón de prueba de un clic que agrega $100) y
+      retirar divisas (con botón de prueba de un clic por cada divisa).
+    * /trade/   — pestaña para comprar divisas con su saldo en USD.
+- Toda operación queda registrada en WalletTransaction para auditoría.
+
+3) PRUEBAS UNITARIAS (PUN.txt)
+---------------------------------
+- Se creó backend/core/tests.py con 24 pruebas unitarias simples
+  (Django TestCase) que cubren roles, el modelo Currency (USD fijo en 1),
+  validación de formularios, control de acceso por rol en las vistas, y
+  los flujos de billetera (carga real y de prueba, compra, retiro real y
+  de prueba, límites de saldo).
+- Se ejecutaron de verdad contra el stack en Docker y las 24 pasaron.
+- El código de las pruebas y la salida completa de la ejecución quedaron
+  en PUN.txt (raíz del proyecto).
+
+4) DOCUMENTACIÓN (esta etapa)
+--------------------------------
+- Toda la documentación existente del proyecto (README, guía de
+  secretos/arranque en sus tres formatos, y la guía de acceso HTML) se
+  movió a la carpeta PDO/ (excepto PUN.txt, que se queda en la raíz).
+- Cada documento en inglés se tradujo al español; ambas versiones
+  conviven en PDO/ con sufijos _EN y _ES. El detalle está en
+  PDO/INDICE.txt.
+- Se creó este archivo, CHIA.txt, como resumen rápido de la sesión.
+- Se creó QA.txt con documentación de control de calidad (cómo probar
+  el proyecto, checklist manual por rol, cobertura de las pruebas
+  automáticas, limitaciones conocidas).
+
+Estado actual del proyecto
+----------------------------
+- El stack corre en Docker (docker compose up -d --build) y ya fue
+  reconstruido y probado con todos estos cambios.
+- Usuarios de demo en Keycloak: demo.admin, demo.manager y
+  demo.customer (rol user), contraseña ChangeMe123! para los tres.
+- Próximos pasos sugeridos (no implementados todavía): página de venta
+  de divisas (vender tenencia de vuelta a USD, distinto de "retirar"),
+  historial de transacciones paginado, y aplicar límites/comisiones a
+  las operaciones de compra/venta.
