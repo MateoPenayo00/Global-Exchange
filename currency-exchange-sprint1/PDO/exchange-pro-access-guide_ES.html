@@ -1,0 +1,576 @@
+<title>Guía de acceso de Exchange Pro</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&family=Source+Sans+3:ital,wght@0,400;0,500;0,600;1,400&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+  :root {
+    --bg: #faf9f4;
+    --surface: #ffffff;
+    --surface-2: #f3f1e8;
+    --ink: #1c1f2a;
+    --ink-soft: #3a3f4e;
+    --muted: #666c7c;
+    --line: #e4e1d4;
+    --line-strong: #d3cfbd;
+    --accent: #a8722f;
+    --accent-ink: #7a5217;
+    --accent-soft: #f2e4cd;
+    --good: #3d7a52;
+    --good-soft: #e2efe4;
+    --bad: #a3402f;
+    --bad-soft: #f7e5e0;
+    --shadow: 0 1px 2px rgba(28,31,42,.04), 0 8px 24px -12px rgba(28,31,42,.12);
+    --font-display: "Fraunces", Georgia, "Times New Roman", serif;
+    --font-body: "Source Sans 3", -apple-system, "Segoe UI", sans-serif;
+    --font-mono: "JetBrains Mono", "SF Mono", Consolas, monospace;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #14151c;
+      --surface: #1b1d27;
+      --surface-2: #23262f;
+      --ink: #ece9df;
+      --ink-soft: #c7c4b8;
+      --muted: #9a9dab;
+      --line: #2d303c;
+      --line-strong: #3a3d4a;
+      --accent: #dba15a;
+      --accent-ink: #f0c087;
+      --accent-soft: #362a17;
+      --good: #7fbf94;
+      --good-soft: #1c2c22;
+      --bad: #d98a78;
+      --bad-soft: #2f2019;
+      --shadow: 0 1px 2px rgba(0,0,0,.3), 0 8px 24px -12px rgba(0,0,0,.5);
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #14151c;
+    --surface: #1b1d27;
+    --surface-2: #23262f;
+    --ink: #ece9df;
+    --ink-soft: #c7c4b8;
+    --muted: #9a9dab;
+    --line: #2d303c;
+    --line-strong: #3a3d4a;
+    --accent: #dba15a;
+    --accent-ink: #f0c087;
+    --accent-soft: #362a17;
+    --good: #7fbf94;
+    --good-soft: #1c2c22;
+    --bad: #d98a78;
+    --bad-soft: #2f2019;
+    --shadow: 0 1px 2px rgba(0,0,0,.3), 0 8px 24px -12px rgba(0,0,0,.5);
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font-family: var(--font-body);
+    font-size: 16.5px;
+    line-height: 1.6;
+  }
+
+  .page {
+    max-width: 780px;
+    margin: 0 auto;
+    padding: 4.5rem 1.5rem 6rem;
+  }
+
+  header.masthead {
+    margin-bottom: 3rem;
+  }
+  .eyebrow {
+    display: flex;
+    align-items: center;
+    gap: .6rem;
+    font-family: var(--font-mono);
+    font-size: .78rem;
+    letter-spacing: .09em;
+    text-transform: uppercase;
+    color: var(--accent-ink);
+    margin: 0 0 1.1rem;
+  }
+  .eyebrow::before {
+    content: "";
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: var(--accent);
+    flex: none;
+  }
+  h1 {
+    font-family: var(--font-display);
+    font-weight: 600;
+    font-size: clamp(2.1rem, 5vw, 2.75rem);
+    line-height: 1.08;
+    letter-spacing: -0.01em;
+    margin: 0 0 .9rem;
+    text-wrap: balance;
+    color: var(--ink);
+  }
+  .dek {
+    font-size: 1.08rem;
+    color: var(--ink-soft);
+    max-width: 62ch;
+    margin: 0 0 1.6rem;
+  }
+  .meta-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1.5rem;
+    padding-top: 1.4rem;
+    border-top: 1px solid var(--line);
+    font-size: .88rem;
+    color: var(--muted);
+  }
+  .meta-row strong { color: var(--ink-soft); font-weight: 600; }
+
+  section { margin-bottom: 3.4rem; }
+  h2 {
+    font-family: var(--font-display);
+    font-weight: 600;
+    font-size: 1.5rem;
+    letter-spacing: -0.005em;
+    margin: 0 0 .35rem;
+    text-wrap: balance;
+  }
+  .section-sub {
+    color: var(--muted);
+    font-size: .96rem;
+    margin: 0 0 1.4rem;
+    max-width: 62ch;
+  }
+  p { margin: 0 0 1rem; max-width: 68ch; }
+  p:last-child { margin-bottom: 0; }
+
+  code, .mono {
+    font-family: var(--font-mono);
+    font-size: .87em;
+    background: var(--surface-2);
+    border: 1px solid var(--line);
+    border-radius: 4px;
+    padding: .08em .38em;
+    color: var(--ink-soft);
+  }
+
+  /* --- diagram --- */
+  .diagram-card {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    box-shadow: var(--shadow);
+    padding: 1.6rem 1.6rem 1.3rem;
+  }
+  .diagram-card svg { display: block; width: 100%; height: auto; }
+  .diagram-caption {
+    margin-top: 1rem;
+    padding-top: 1rem;
+    border-top: 1px dashed var(--line);
+    font-size: .87rem;
+    color: var(--muted);
+  }
+  .diagram-caption b { color: var(--ink-soft); }
+
+  /* --- numbered flow --- */
+  .flow { display: flex; flex-direction: column; }
+  .flow-step {
+    display: grid;
+    grid-template-columns: 2.4rem 1fr;
+    gap: 0 1rem;
+    padding: 1.1rem 0;
+    border-top: 1px solid var(--line);
+  }
+  .flow-step:first-child { border-top: 1px solid var(--line-strong); }
+  .flow-num {
+    font-family: var(--font-display);
+    font-weight: 600;
+    font-size: 1.3rem;
+    color: var(--accent);
+    line-height: 1.3;
+  }
+  .flow-body h3 {
+    margin: 0 0 .3rem;
+    font-size: 1.02rem;
+    font-weight: 600;
+    color: var(--ink);
+  }
+  .flow-body p { margin: 0; font-size: .95rem; color: var(--ink-soft); }
+  .flow-tag {
+    display: inline-block;
+    font-family: var(--font-mono);
+    font-size: .72rem;
+    letter-spacing: .03em;
+    color: var(--muted);
+    background: var(--surface-2);
+    border: 1px solid var(--line);
+    border-radius: 4px;
+    padding: .1em .45em;
+    margin-left: .5em;
+    transform: translateY(-1px);
+  }
+
+  /* --- credential / table cards --- */
+  .card-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: .9rem;
+  }
+  .cred-card {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 1.15rem 1.25rem;
+    box-shadow: var(--shadow);
+  }
+  .cred-card .label {
+    font-family: var(--font-mono);
+    font-size: .72rem;
+    letter-spacing: .06em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: .5rem;
+  }
+  .cred-card .value {
+    font-family: var(--font-mono);
+    font-size: .96rem;
+    color: var(--ink);
+    word-break: break-all;
+  }
+  .cred-card .note {
+    margin-top: .5rem;
+    font-size: .82rem;
+    color: var(--muted);
+  }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: .93rem;
+  }
+  .table-wrap {
+    overflow-x: auto;
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    box-shadow: var(--shadow);
+  }
+  th, td {
+    text-align: left;
+    padding: .75rem 1rem;
+    border-bottom: 1px solid var(--line);
+    vertical-align: top;
+  }
+  thead th {
+    font-family: var(--font-mono);
+    font-size: .74rem;
+    letter-spacing: .05em;
+    text-transform: uppercase;
+    color: var(--muted);
+    background: var(--surface-2);
+    font-weight: 500;
+  }
+  tbody tr:last-child td { border-bottom: none; }
+  td .mono, th .mono { background: none; border: none; padding: 0; }
+
+  .pill {
+    display: inline-flex;
+    align-items: center;
+    gap: .35em;
+    font-size: .78rem;
+    font-weight: 600;
+    padding: .15em .6em;
+    border-radius: 999px;
+  }
+  .pill.good { background: var(--good-soft); color: var(--good); }
+  .pill.bad { background: var(--bad-soft); color: var(--bad); }
+  .pill.neutral { background: var(--surface-2); color: var(--muted); }
+
+  /* --- gotcha callout --- */
+  .gotcha {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-left: 3px solid var(--bad);
+    border-radius: 8px;
+    box-shadow: var(--shadow);
+    padding: 1.3rem 1.4rem;
+    margin-bottom: 1.1rem;
+  }
+  .gotcha:last-child { margin-bottom: 0; }
+  .gotcha-head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 1rem;
+    margin-bottom: .5rem;
+  }
+  .gotcha-head h3 {
+    margin: 0;
+    font-size: 1rem;
+    font-weight: 600;
+    color: var(--ink);
+  }
+  .gotcha-err {
+    display: block;
+    font-family: var(--font-mono);
+    font-size: .82rem;
+    color: var(--bad);
+    background: var(--bad-soft);
+    border-radius: 6px;
+    padding: .55rem .7rem;
+    margin: .6rem 0;
+    overflow-x: auto;
+    white-space: pre;
+  }
+  .gotcha p { font-size: .93rem; color: var(--ink-soft); }
+  .fix-line {
+    display: flex;
+    gap: .5rem;
+    align-items: baseline;
+    font-size: .88rem;
+    margin-top: .6rem;
+  }
+  .fix-line .fix-label {
+    font-family: var(--font-mono);
+    font-size: .72rem;
+    letter-spacing: .04em;
+    text-transform: uppercase;
+    color: var(--good);
+    flex: none;
+  }
+
+  footer {
+    margin-top: 4rem;
+    padding-top: 1.5rem;
+    border-top: 1px solid var(--line);
+    font-size: .84rem;
+    color: var(--muted);
+    display: flex;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: .5rem;
+  }
+
+  @media (max-width: 560px) {
+    .flow-step { grid-template-columns: 1.8rem 1fr; }
+    .gotcha-head { flex-direction: column; gap: .3rem; }
+  }
+</style>
+
+<div class="page">
+
+  <header class="masthead">
+    <p class="eyebrow">Referencia — realm exchange&#8209;learning</p>
+    <h1>Guía de acceso de Exchange Pro</h1>
+    <p class="dek">Cómo funcionan de punta a punta el inicio de sesión y el registro, dónde vive la consola de administración de Keycloak, y el error de "issuer" (emisor) que estuvo bloqueando cada login hasta hoy.</p>
+    <div class="meta-row">
+      <span><strong>Stack</strong> Django 5.1 + mozilla&#8209;django&#8209;oidc + Keycloak 25.0.6</span>
+      <span><strong>Realm</strong> <span class="mono">exchange-learning</span></span>
+      <span><strong>Actualizado</strong> 4 sep 2026</span>
+    </div>
+  </header>
+
+  <section>
+    <h2>Dos puertas hacia el mismo realm</h2>
+    <p class="section-sub">Toda petición llega o bien desde un navegador a través de nginx, o bien desde el contenedor de Django hablando directamente con Keycloak. Las dos puertas deben declarar el mismo nombre de host, o Keycloak rechaza el token.</p>
+
+    <div class="diagram-card">
+      <svg viewBox="0 0 720 300" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="El navegador llega a Keycloak a través de nginx en localhost; el contenedor web de Django llega a Keycloak directamente por la red de Docker, pero debe enviar una cabecera Host de localhost para que ambos caminos coincidan en el emisor (issuer).">
+        <defs>
+          <marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+            <path d="M0,0 L10,5 L0,10 z" fill="var(--muted)"></path>
+          </marker>
+        </defs>
+        <style>
+          .node-box { fill: var(--surface); stroke: var(--line-strong); stroke-width: 1; }
+          .node-label { font-family: var(--font-body); font-size: 13px; fill: var(--ink); font-weight: 600; }
+          .node-sub { font-family: var(--font-mono); font-size: 10.5px; fill: var(--muted); }
+          .path-line { fill: none; stroke: var(--muted); stroke-width: 1.3; marker-end: url(#arrow); }
+          .path-label { font-family: var(--font-mono); font-size: 10.5px; fill: var(--ink-soft); }
+          .path-accent { stroke: var(--accent); }
+          .path-accent-label { fill: var(--accent-ink); font-weight: 600; }
+        </style>
+
+        <rect x="16" y="30" class="node-box" width="120" height="52" rx="8"></rect>
+        <text x="76" y="52" text-anchor="middle" class="node-label">Navegador</text>
+        <text x="76" y="68" text-anchor="middle" class="node-sub">vos</text>
+
+        <rect x="16" y="200" class="node-box" width="120" height="52" rx="8"></rect>
+        <text x="76" y="222" text-anchor="middle" class="node-label">web</text>
+        <text x="76" y="238" text-anchor="middle" class="node-sub">Django + gunicorn</text>
+
+        <rect x="300" y="115" class="node-box" width="120" height="52" rx="8"></rect>
+        <text x="360" y="137" text-anchor="middle" class="node-label">nginx</text>
+        <text x="360" y="153" text-anchor="middle" class="node-sub">:80</text>
+
+        <rect x="580" y="115" class="node-box" width="124" height="52" rx="8"></rect>
+        <text x="642" y="137" text-anchor="middle" class="node-label">keycloak</text>
+        <text x="642" y="153" text-anchor="middle" class="node-sub">:8080</text>
+
+        <path class="path-line" d="M136,56 C220,56 220,130 296,138"></path>
+        <text x="150" y="42" class="path-label">Host: localhost</text>
+
+        <path class="path-line path-accent" d="M136,220 C420,255 560,220 636,171"></path>
+        <text x="150" y="272" class="path-accent-label path-label">Host: localhost (forzado)</text>
+        <text x="150" y="286" class="path-label">→ se conecta directo a keycloak:8080</text>
+
+        <path class="path-line" d="M420,141 L576,141"></path>
+        <text x="452" y="132" class="path-label">/realms/…</text>
+      </svg>
+      <p class="diagram-caption"><b>La regla:</b> cualquiera sea el nombre de host que el navegador usó para llegar a nginx — <span class="mono">localhost</span>, <span class="mono">127.0.0.1</span> o una IP de LAN — cada llamada posterior de servidor a servidor de esa misma sesión debe presentar exactamente esa cadena como su cabecera <span class="mono">Host</span>, aunque físicamente se conecte a <span class="mono">keycloak:8080</span> en la red de Docker.</p>
+    </div>
+  </section>
+
+  <section>
+    <h2>Flujo de inicio de sesión y registro</h2>
+    <p class="section-sub">Tanto <span class="mono">/login/</span> como <span class="mono">/register/</span> terminan en el mismo intercambio de OpenID Connect; el registro solo añade <span class="mono">kc_action=register</span> para que Keycloak abra su pestaña de alta en lugar de la de inicio de sesión.</p>
+
+    <div class="flow">
+      <div class="flow-step">
+        <div class="flow-num">1</div>
+        <div class="flow-body">
+          <h3>Django redirige a Keycloak <span class="flow-tag">navegador</span></h3>
+          <p><span class="mono">views.login_view</span> / <span class="mono">register_view</span> envían al navegador a <span class="mono">oidc_authentication_init</span>, que construye la URL de autorización a partir de <span class="mono">KEYCLOAK_PUBLIC_URL</span> — el host por el que realmente se está navegando.</p>
+        </div>
+      </div>
+      <div class="flow-step">
+        <div class="flow-num">2</div>
+        <div class="flow-body">
+          <h3>Keycloak autentica al usuario <span class="flow-tag">navegador</span></h3>
+          <p>El formulario de login o registro se sirve en <span class="mono">/realms/exchange-learning/protocol/openid-connect/auth</span>, retransmitido por nginx directamente hacia el contenedor <span class="mono">keycloak</span>.</p>
+        </div>
+      </div>
+      <div class="flow-step">
+        <div class="flow-num">3</div>
+        <div class="flow-body">
+          <h3>El navegador vuelve con un código <span class="flow-tag">navegador</span></h3>
+          <p>Keycloak redirige a <span class="mono">/oidc/callback/</span> con un <span class="mono">code</span> de autorización en el query string. Todavía no existe ningún token — el código es de un solo uso y de vida corta.</p>
+        </div>
+      </div>
+      <div class="flow-step">
+        <div class="flow-num">4</div>
+        <div class="flow-body">
+          <h3>Django intercambia el código <span class="flow-tag">servidor a servidor</span></h3>
+          <p><span class="mono">KeycloakOIDCAuthenticationBackend</span> envía por POST el código a <span class="mono">KEYCLOAK_INTERNAL_URL</span> (<span class="mono">http://keycloak:8080</span>) directamente, con la cabecera <span class="mono">Host</span> fijada al nombre de host del paso 1. Keycloak devuelve un access token y un ID token.</p>
+        </div>
+      </div>
+      <div class="flow-step">
+        <div class="flow-num">5</div>
+        <div class="flow-body">
+          <h3>Django obtiene el perfil <span class="flow-tag">servidor a servidor</span></h3>
+          <p>El access token se envía al endpoint interno <span class="mono">/userinfo</span>, de nuevo con la cabecera <span class="mono">Host</span> correspondiente, para obtener los claims de correo y nombre.</p>
+        </div>
+      </div>
+      <div class="flow-step">
+        <div class="flow-num">6</div>
+        <div class="flow-body">
+          <h3>Se crea o se empareja la cuenta local <span class="flow-tag">servidor</span></h3>
+          <p><span class="mono">filter_users_by_claims</span> busca un usuario de Django existente por nombre de usuario o correo; si no existe ninguno, <span class="mono">create_user</span> crea uno y la sesión inicia, aterrizando en <span class="mono">/dashboard/</span>.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Consola de administración de Keycloak</h2>
+    <p class="section-sub">La consola administra ambos realms — <span class="mono">master</span> (el realm de administración propio de Keycloak) y <span class="mono">exchange-learning</span> (el realm de la aplicación, donde realmente viven sus usuarios y clientes).</p>
+
+    <div class="card-grid">
+      <div class="cred-card">
+        <div class="label">URL de la consola</div>
+        <div class="value">localhost/admin/master/console/</div>
+        <div class="note">Servida a través de nginx → <span class="mono">keycloak:8080</span>. También accesible en 127.0.0.1 o en la IP de LAN.</div>
+      </div>
+      <div class="cred-card">
+        <div class="label">Login de administrador</div>
+        <div class="value">admin</div>
+        <div class="note">La contraseña es la que se haya definido en <span class="mono">KEYCLOAK_ADMIN_PASSWORD</span> dentro de <span class="mono">.env</span> — no se repite aquí. Rótala antes de que esto salga de tu máquina.</div>
+      </div>
+      <div class="cred-card">
+        <div class="label">Realm de la app</div>
+        <div class="value">exchange-learning</div>
+        <div class="note">Se cambia desde el desplegable de realm, arriba a la izquierda, una vez dentro de la consola.</div>
+      </div>
+      <div class="cred-card">
+        <div class="label">Usuario de demo sembrado</div>
+        <div class="value">demo.customer</div>
+        <div class="note">Rol <span class="mono">customer</span>. La contraseña se define en <span class="mono">keycloak/realm-export.json</span>, dentro de la entrada <span class="mono">credentials</span> de este usuario, y se reimporta en cada volumen nuevo — no se repite aquí.</div>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Clientes y roles en el realm</h2>
+    <p class="section-sub">Tres clientes registrados, cada uno con una tarea acotada. Solo <span class="mono">exchange-web</span> es alcanzable desde un navegador.</p>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr><th>Cliente</th><th>Usado por</th><th>Tipo de grant</th><th>¿Alcanzable desde el navegador?</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><span class="mono">exchange-web</span></td>
+            <td>La propia aplicación Django — login, registro, logout</td>
+            <td>Authorization code</td>
+            <td><span class="pill good">Sí</span></td>
+          </tr>
+          <tr>
+            <td><span class="mono">exchange-admin-api</span></td>
+            <td><span class="mono">KeycloakAdminClient</span> — elimina la cuenta de Keycloak de un usuario cuando este elimina su cuenta de Django</td>
+            <td>Client credentials</td>
+            <td><span class="pill neutral">No</span></td>
+          </tr>
+          <tr>
+            <td><span class="mono">security-admin-console</span></td>
+            <td>La propia interfaz de administración de Keycloak (incorporada)</td>
+            <td>Authorization code</td>
+            <td><span class="pill good">Sí</span></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="section-sub" style="margin-top:1.1rem;"><b>Nota histórica (documento original, 4 sep 2026):</b> en ese momento los roles de realm estaban definidos pero todavía no se aplicaban en ningún lugar de Django: <span class="mono">customer</span> (asignado a <span class="mono">demo.customer</span>) y <span class="mono">admin</span>. Conectar esto a <span class="mono">verify_claims</span> o a una comprobación de permisos quedaba como trabajo pendiente. <u>Esto ya no es así</u>: el proyecto ahora define los roles <span class="mono">admin</span>, <span class="mono">manager</span> y <span class="mono">user</span>, aplicados en cada vista mediante <span class="mono">core/roles.py</span> y el decorador <span class="mono">role_required</span> — ver <span class="mono">CHIA.txt</span> y <span class="mono">PDO/core-README_ES.md</span> para el estado actual.</p>
+  </section>
+
+  <section>
+    <h2>Qué estaba realmente roto</h2>
+    <p class="section-sub">Dos errores distintos, ambos variaciones del mismo tema: una llamada que debía parecer que venía de <span class="mono">localhost</span> no lo parecía.</p>
+
+    <div class="gotcha">
+      <div class="gotcha-head">
+        <h3>1 · 502 en <span class="mono">/register/</span></h3>
+        <span class="pill bad">carrera de arranque</span>
+      </div>
+      <p>nginx empezó a aceptar tráfico antes de que Keycloak terminara su primer arranque (inusualmente lento, ~76 minutos), así que la primerísima petición a <span class="mono">/realms/…/auth</span> chocó contra un puerto cerrado.</p>
+      <div class="fix-line"><span class="fix-label">estado</span> Transitorio — se resolvió solo una vez que Keycloak terminó de arrancar. Sin cambio de código; vale la pena añadir más adelante un healthcheck para que nginx lo espere.</div>
+    </div>
+
+    <div class="gotcha">
+      <div class="gotcha-head">
+        <h3>2 · <span class="mono">ConnectionError</span> en <span class="mono">/oidc/callback/</span></h3>
+        <span class="pill bad">configuración</span>
+      </div>
+      <span class="gotcha-err">HTTPConnectionPool(host='localhost', port=80): Failed to establish a new connection</span>
+      <p>Los endpoints de token/userinfo/JWKS se construían a partir de <span class="mono">KEYCLOAK_PUBLIC_URL</span> (<span class="mono">http://localhost</span>). Llamado desde <em>dentro</em> del contenedor <span class="mono">web</span>, <span class="mono">localhost</span> significa el propio contenedor — ahí no escucha nada en el puerto 80.</p>
+      <div class="fix-line"><span class="fix-label">arreglo</span> Apuntar esos tres endpoints a <span class="mono">KEYCLOAK_INTERNAL_URL</span> (<span class="mono">http://keycloak:8080</span>) en <span class="mono">settings.py</span>, y evitar que <span class="mono">LocalhostAutoDetectMiddleware</span> los vuelva a sobrescribir con el host público en cada petición.</div>
+    </div>
+
+    <div class="gotcha">
+      <div class="gotcha-head">
+        <h3>3 · <span class="mono">401</span> en <span class="mono">/userinfo</span></h3>
+        <span class="pill bad">configuración</span>
+      </div>
+      <span class="gotcha-err">401 Client Error: Unauthorized
+reason="Invalid token issuer. Expected 'http://keycloak:8080/realms/exchange-learning'"</span>
+      <p>Al arreglar el error 2 llamando directamente a <span class="mono">keycloak:8080</span> apareció un desajuste nuevo: Keycloak estampa el claim <span class="mono">iss</span> de un token a partir de la cabecera <span class="mono">Host</span> usada para llegar a <span class="mono">/auth</span> — <span class="mono">localhost</span> — pero luego esperaba ese mismo <span class="mono">Host</span> también en las llamadas posteriores de token/userinfo. Llamarlo como <span class="mono">keycloak:8080</span> hacía que Keycloak esperara un emisor (issuer) de <span class="mono">keycloak:8080</span>, que el token no tenía.</p>
+      <div class="fix-line"><span class="fix-label">arreglo</span> <span class="mono">KeycloakOIDCAuthenticationBackend</span> ahora sobrescribe <span class="mono">get_token</span> y <span class="mono">get_userinfo</span> para seguir llamando directamente a <span class="mono">keycloak:8080</span>, pero forzando la cabecera <span class="mono">Host</span> saliente a <span class="mono">request.get_host()</span> — el nombre de host que el navegador realmente usó.</div>
+    </div>
+  </section>
+
+  <footer>
+    <span>currency-exchange-sprint1 / backend</span>
+    <span>core/backends.py · core/middleware.py · config/settings.py</span>
+  </footer>
+
+</div>
