@@ -1,0 +1,102 @@
+{% extends 'core/base.html' %}
+{% block title %}Exchange Pro | Mi billetera{% endblock %}
+{% block content %}
+  <div class="stack">
+    <div class="card stack">
+      <div>
+        <h1>Mi billetera</h1>
+        <p class="muted">USD es la divisa universal: tu saldo se guarda en dólares y se usa para comprar otras divisas.</p>
+      </div>
+
+      <div>
+        <p style="font-size:28px; margin:0;"><strong>${{ wallet.usd_balance }}</strong> <span class="muted" style="font-size:14px;">USD disponibles</span></p>
+      </div>
+
+      <div style="display:flex; gap:24px; flex-wrap:wrap;">
+        <form method="post" action="{% url 'wallet_deposit' %}" style="display:flex; gap:8px; align-items:end; flex-wrap:wrap;">
+          {% csrf_token %}
+          <div class="field" style="margin-bottom:0;">
+            <label>{{ deposit_form.amount.label }}</label>
+            {{ deposit_form.amount }}
+          </div>
+          <button class="btn btn-primary" type="submit">Cargar saldo</button>
+        </form>
+
+        <form method="post" action="{% url 'wallet_deposit_test' %}">
+          {% csrf_token %}
+          <button class="btn btn-secondary" type="submit">Cargar ${{ test_deposit_amount }} de prueba</button>
+        </form>
+      </div>
+    </div>
+
+    <div class="card stack">
+      <h2>Mis divisas</h2>
+      {% if holdings %}
+        <div style="overflow-x:auto;">
+          <table>
+            <thead><tr><th>Divisa</th><th>Cantidad</th><th>Valor estimado (USD)</th><th>Retiro rápido</th></tr></thead>
+            <tbody>
+              {% for holding in holdings %}
+                <tr>
+                  <td>{{ holding.currency.code }} — {{ holding.currency.name }}</td>
+                  <td>{{ holding.amount }}</td>
+                  <td>${{ holding.amount|floatformat:2 }} × {{ holding.currency.value_in_usd }}</td>
+                  <td>
+                    <form method="post" action="{% url 'wallet_withdraw_test' holding.currency.id %}" style="display:inline;">
+                      {% csrf_token %}
+                      <button class="btn btn-secondary" type="submit">Retirar {{ test_withdraw_amount }} (prueba)</button>
+                    </form>
+                  </td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      {% else %}
+        <p class="muted">Todavía no tienes divisas en tu billetera. Ve a <a href="{% url 'trade' %}">Comprar divisas</a>.</p>
+      {% endif %}
+    </div>
+
+    {% if holdings %}
+      <div class="card stack">
+        <h2>Retirar divisas</h2>
+        <form method="post" action="{% url 'wallet_withdraw' %}" style="display:flex; gap:12px; align-items:end; flex-wrap:wrap;">
+          {% csrf_token %}
+          <div class="field" style="margin-bottom:0;">
+            <label>{{ withdraw_form.currency.label }}</label>
+            {{ withdraw_form.currency }}
+          </div>
+          <div class="field" style="margin-bottom:0;">
+            <label>{{ withdraw_form.amount.label }}</label>
+            {{ withdraw_form.amount }}
+          </div>
+          <button class="btn btn-danger" type="submit">Retirar</button>
+        </form>
+      </div>
+    {% endif %}
+
+    <div class="card stack">
+      <h2>Movimientos recientes</h2>
+      {% if transactions %}
+        <div style="overflow-x:auto;">
+          <table>
+            <thead><tr><th>Fecha</th><th>Tipo</th><th>Divisa</th><th>Cantidad</th><th>USD</th></tr></thead>
+            <tbody>
+              {% for tx in transactions %}
+                <tr>
+                  <td>{{ tx.created_at|date:'d/m/Y H:i' }}</td>
+                  <td>{{ tx.get_kind_display }}</td>
+                  <td>{{ tx.currency.code|default:'USD' }}</td>
+                  <td>{{ tx.amount }}</td>
+                  <td>${{ tx.usd_amount }}</td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      {% else %}
+        <p class="muted">Sin movimientos todavía.</p>
+      {% endif %}
+    </div>
+  </div>
+{% endblock %}

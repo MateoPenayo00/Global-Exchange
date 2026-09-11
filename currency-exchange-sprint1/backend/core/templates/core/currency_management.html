@@ -2,15 +2,39 @@
 {% block title %}Exchange Pro | Divisas{% endblock %}
 {% block content %}
   <div class="card stack">
-    <div>
-      <h1>Gestión de divisas</h1>
-      <p class="muted">Capacidad de gestor. Los administradores también tienen acceso.</p>
+    <div style="display:flex; justify-content:space-between; align-items:center; gap:16px; flex-wrap:wrap;">
+      <div>
+        <h1>Gestión de divisas</h1>
+        <p class="muted">USD es la divisa universal (valor fijo 1.000000). Sube o baja el valor de las demás divisas frente al dólar.</p>
+      </div>
+      <a class="btn btn-primary" href="{% url 'currency_create' %}">Nueva divisa</a>
     </div>
-    <div>
-      <p>Desde aquí un gestor podrá definir y actualizar el valor de ciertas divisas. La edición de cotizaciones se implementará en un sprint posterior.</p>
-    </div>
-    <div>
-      <a class="btn btn-primary" href="/dashboard/">Volver al panel</a>
+
+    <div style="overflow-x:auto;">
+      <table>
+        <thead>
+          <tr><th>Código</th><th>Nombre</th><th>Símbolo</th><th>Valor en USD</th><th>Estado</th><th>Acciones</th></tr>
+        </thead>
+        <tbody>
+          {% for currency in currencies %}
+            <tr>
+              <td><strong>{{ currency.code }}</strong>{% if currency.is_base %} <span class="tag">universal</span>{% endif %}</td>
+              <td>{{ currency.name }}</td>
+              <td>{{ currency.symbol|default:'—' }}</td>
+              <td>{{ currency.value_in_usd }}</td>
+              <td>{% if currency.is_active %}Activa{% else %}<span class="danger">Inactiva</span>{% endif %}</td>
+              <td>
+                <a href="{% url 'currency_edit' currency.id %}">Editar valor</a>
+                {% if not currency.is_base %}
+                  &nbsp;·&nbsp;<a class="danger" href="{% url 'currency_delete' currency.id %}">Eliminar</a>
+                {% endif %}
+              </td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="6" class="muted">No hay divisas cargadas todavía.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
     </div>
   </div>
 {% endblock %}

@@ -30,3 +30,28 @@ default `user` role automatically on first login.
 
 The Admin API service account (`exchange-admin-api`) needs the
 `realm-management: realm-admin` role, set in `keycloak/realm-export.json`.
+
+## Currencies and wallets
+
+`core/models.py` adds the app's own domain data (in the Postgres `exchange_db`,
+separate from Keycloak identity):
+
+* **`Currency`** — `code`, `name`, `symbol`, `value_in_usd`. **USD is the
+  universal currency**: it is seeded by the `0002_seed_usd` migration, its
+  value is hard-locked to `1.000000` (see `Currency.save`), and it cannot be
+  deleted. `admin`/`manager` get full CRUD at `/currencies/`, which is how
+  they raise or lower every other currency's value against the dollar.
+* **`Wallet`** — one per user, holds the USD cash balance.
+* **`WalletHolding`** — how much of each currency a wallet holds.
+* **`WalletTransaction`** — an audit log of deposits, buys, and withdrawals.
+
+User-facing flows (role `user`, `/wallet/` and `/trade/`):
+
+* **Add balance** — a normal amount form, plus a one-click "Cargar $100 de
+  prueba" test button (`wallet_deposit_test`) that credits a fixed demo amount
+  without needing a real payment method.
+* **Buy** — `/trade/` spends USD balance to acquire a currency into the
+  wallet, at that currency's current `value_in_usd` rate.
+* **Withdraw** — a normal form (pick currency + amount) plus a per-currency
+  one-click "Retirar 1 (prueba)" test button (`wallet_withdraw_test`) that
+  removes a small fixed demo amount from that holding.
