@@ -1,0 +1,21 @@
+{% extends 'core/base.html' %}
+{% block title %}Exchange Pro | Eliminar tarjeta{% endblock %}
+{% block topbar_title %}Eliminar tarjeta{% endblock %}
+{% block content %}
+  <div class="card" style="max-width:560px">
+    <div class="card-head">
+      <h1>¿Eliminar esta tarjeta?</h1>
+      <p class="muted">
+        <strong>{{ card.label }}</strong> — {{ card.get_brand_display }} {{ card.masked_number }}.
+        Tus movimientos ya registrados con ella se conservan en el historial.
+      </p>
+    </div>
+    <form method="post">
+      {% csrf_token %}
+      <div class="btn-group">
+        <button class="btn btn-danger" type="submit">Sí, eliminar</button>
+        <a class="btn btn-secondary" href="{% url 'wallet' %}">Cancelar</a>
+      </div>
+    </form>
+  </div>
+{% endblock %}

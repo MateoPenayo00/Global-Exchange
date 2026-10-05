@@ -1,35 +1,43 @@
 {% extends 'core/base.html' %}
 {% block title %}Exchange Pro | Eliminar cuenta{% endblock %}
+{% block topbar_title %}Eliminar cuenta{% endblock %}
 {% block content %}
-  <div class="card stack">
-    <div>
+  <div class="card" style="max-width:600px">
+    <div class="card-head">
       <h1 class="danger">Eliminar cuenta</h1>
-      <p class="muted">Esta acción eliminará la cuenta correspondiente en Keycloak. Es permanente y quitará el acceso a la aplicación.</p>
+      <p class="muted">
+        Esta acción elimina la cuenta en Keycloak. Es permanente y te quita el acceso a la aplicación.
+      </p>
     </div>
 
-    <div>
-      <p><strong>Nombre visible:</strong> {{ profile_name }}</p>
-      <p><strong>Correo:</strong> {{ profile_email|default:'No disponible todavía' }}</p>
+    <div class="kpis" style="margin-bottom:20px">
+      <div class="kpi">
+        <span class="kpi-label">Nombre visible</span>
+        <span class="kpi-value" style="font-size:1.0625rem">{{ profile_name }}</span>
+      </div>
+      <div class="kpi">
+        <span class="kpi-label">Correo</span>
+        <span class="kpi-value" style="font-size:1.0625rem">{{ profile_email|default:'No disponible' }}</span>
+      </div>
     </div>
 
-    <div>
-      <p>Para evitar eliminaciones accidentales, escribe <strong>DELETE</strong> abajo y envía el formulario.</p>
-      <p class="muted">El formulario hace una comprobación estricta y después el servidor llama al admin API de Keycloak usando la cuenta de servicio dedicada.</p>
+    <div class="notice" style="margin-bottom:20px">
+      <span>Para evitar eliminaciones accidentales, escribí <strong>DELETE</strong> y enviá el formulario.</span>
     </div>
 
     <form method="post">
       {% csrf_token %}
-      {{ form.non_field_errors }}
+      {% if form.non_field_errors %}
+        <ul class="errorlist">{% for error in form.non_field_errors %}<li>{{ error }}</li>{% endfor %}</ul>
+      {% endif %}
       <div class="field">
-        <label for="id_confirmation">{{ form.confirmation.label }}</label>
+        <label for="{{ form.confirmation.id_for_label }}">{{ form.confirmation.label }}</label>
         {{ form.confirmation }}
-        {% if form.confirmation.help_text %}
-          <div class="helptext">{{ form.confirmation.help_text }}</div>
-        {% endif %}
+        {% if form.confirmation.help_text %}<span class="helptext">{{ form.confirmation.help_text }}</span>{% endif %}
         {{ form.confirmation.errors }}
       </div>
-      <div>
-        <button type="submit" class="btn btn-danger">Confirmar eliminación</button>
+      <div class="btn-group">
+        <button class="btn btn-danger" type="submit">Confirmar eliminación</button>
         <a class="btn btn-secondary" href="/account/">Cancelar</a>
       </div>
     </form>
