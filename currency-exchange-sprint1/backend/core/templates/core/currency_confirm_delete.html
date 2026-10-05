@@ -1,15 +1,22 @@
 {% extends 'core/base.html' %}
 {% block title %}Exchange Pro | Eliminar divisa{% endblock %}
+{% block topbar_title %}Eliminar divisa{% endblock %}
 {% block content %}
-  <div class="card stack">
-    <div>
-      <h1>Eliminar divisa</h1>
-      <p>¿Seguro que quieres eliminar <strong>{{ currency.code }} — {{ currency.name }}</strong>? Esta acción no se puede deshacer.</p>
+  <div class="card" style="max-width:560px">
+    <div class="card-head">
+      <h1>¿Eliminar {{ currency.code }}?</h1>
+      <p class="muted">
+        Vas a eliminar <strong>{{ currency.code }} — {{ currency.name }}</strong>. Si alguna billetera
+        tiene saldo o movimientos en esta divisa, la eliminación se va a rechazar; en ese caso lo
+        correcto es desmarcarla como activa.
+      </p>
     </div>
     <form method="post">
       {% csrf_token %}
-      <button class="btn btn-danger" type="submit">Sí, eliminar</button>
-      <a class="btn btn-secondary" href="{% url 'currency_management' %}">Cancelar</a>
+      <div class="btn-group">
+        <button class="btn btn-danger" type="submit">Sí, eliminar</button>
+        <a class="btn btn-secondary" href="{% url 'currency_management' %}">Cancelar</a>
+      </div>
     </form>
   </div>
 {% endblock %}

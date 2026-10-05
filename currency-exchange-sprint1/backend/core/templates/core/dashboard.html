@@ -1,37 +1,40 @@
 {% extends 'core/base.html' %}
 {% block title %}Exchange Pro | Panel{% endblock %}
+{% block topbar_title %}Panel{% endblock %}
 {% block content %}
-  <div class="card stack">
-    <div>
-      <h1>Panel</h1>
-      <p class="muted">Esta página confirma que tu sesión autenticada con Keycloak sigue activa.</p>
-    </div>
+  <div class="stack-lg">
+    <section class="card">
+      <div class="card-head">
+        <h1>Hola, {{ profile_name }}</h1>
+        <p class="muted">Tu sesión está activa a través de Keycloak.</p>
+      </div>
+      <div class="kpis">
+        <div class="kpi">
+          <span class="kpi-label">Usuario</span>
+          <span class="kpi-value" style="font-size:1.0625rem">{{ user.get_username }}</span>
+          <span class="kpi-note">{{ profile_email|default:'Sin correo registrado' }}</span>
+        </div>
+        <div class="kpi kpi-accent">
+          <span class="kpi-label">Roles</span>
+          <span class="sidebar-roles" style="margin-top:4px">
+            {% for role in user_roles %}<span class="tag">{{ role|capfirst }}</span>{% empty %}<span class="muted">Sin rol asignado</span>{% endfor %}
+          </span>
+        </div>
+      </div>
+    </section>
 
-    <div>
-      <p><strong>Usuario:</strong> {{ profile_name }}</p>
-      <p><strong>Correo:</strong> {{ profile_email|default:'No disponible todavía' }}</p>
-      <p><strong>Sesión:</strong> autenticada a través de Keycloak</p>
-      <p><strong>Roles:</strong>
-        {% for role in user_roles %}<span class="tag">{{ role|capfirst }}</span>{% empty %}<span class="muted">Sin rol asignado</span>{% endfor %}
-      </p>
-    </div>
-
-    <div>
-      <h2>Qué puedes hacer</h2>
-      <ul>
-        {% if can_trade %}<li><a href="/trade/">Comprar y vender divisas</a></li>{% endif %}
-        {% if can_manage_currencies %}<li><a href="/currencies/">Gestionar el valor de las divisas</a> (capacidad de gestor)</li>{% endif %}
-        {% if can_manage_users %}<li><a href="/manage/users/">Crear, editar y eliminar usuarios</a> (capacidad de administrador)</li>{% endif %}
-      </ul>
-    </div>
-
-    <div>
-      <p>Para Sprint 1 esta página es intencionalmente simple. Sirve como primera vista autenticada y más adelante podrá crecer hasta convertirse en un panel real de operaciones de cambio.</p>
-    </div>
-
-    <div>
-      <a class="btn btn-primary" href="/account/">Ajustes de cuenta</a>
-      <a class="btn btn-secondary" href="/logout/">Cerrar sesión</a>
-    </div>
+    <section class="card">
+      <h2 class="hexed">Accesos directos</h2>
+      <div class="btn-group" style="margin-top:16px">
+        <a class="btn btn-secondary" href="{% url 'currency_history' %}">Cotizaciones</a>
+        {% if can_trade %}
+          <a class="btn btn-primary" href="{% url 'trade' %}">Comprar y vender</a>
+          <a class="btn btn-secondary" href="{% url 'wallet' %}">Mi billetera</a>
+        {% endif %}
+        {% if can_manage_currencies %}<a class="btn btn-secondary" href="{% url 'currency_management' %}">Gestionar divisas</a>{% endif %}
+        {% if can_simulate %}<a class="btn btn-accent" href="{% url 'simulation' %}">Simular días</a>{% endif %}
+        {% if can_manage_users %}<a class="btn btn-secondary" href="{% url 'admin_users' %}">Usuarios</a>{% endif %}
+      </div>
+    </section>
   </div>
 {% endblock %}

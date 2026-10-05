@@ -1,25 +1,38 @@
 {% extends 'core/base.html' %}
 {% block title %}Exchange Pro | Cuenta{% endblock %}
+{% block topbar_title %}Cuenta{% endblock %}
 {% block content %}
-  <div class="card stack">
-    <div>
-      <h1>Cuenta</h1>
-      <p class="muted">Esta cuenta está gestionada por Keycloak, que es el sistema de identidad del proyecto.</p>
-    </div>
+  <div class="stack-lg">
+    <section class="card">
+      <div class="card-head">
+        <h1>Mi cuenta</h1>
+        <p class="muted">La identidad de esta cuenta la gestiona Keycloak, el sistema de identidad del proyecto.</p>
+      </div>
+      <div class="kpis">
+        <div class="kpi">
+          <span class="kpi-label">Nombre visible</span>
+          <span class="kpi-value" style="font-size:1.0625rem">{{ profile_name }}</span>
+        </div>
+        <div class="kpi">
+          <span class="kpi-label">Correo</span>
+          <span class="kpi-value" style="font-size:1.0625rem">{{ profile_email|default:'No disponible' }}</span>
+        </div>
+        <div class="kpi">
+          <span class="kpi-label">Usuario</span>
+          <span class="kpi-value" style="font-size:1.0625rem">{{ user.get_username }}</span>
+        </div>
+      </div>
+    </section>
 
-    <div>
-      <p><strong>Nombre visible:</strong> {{ profile_name }}</p>
-      <p><strong>Correo:</strong> {{ profile_email|default:'No disponible todavía' }}</p>
-      <p><strong>Nombre de usuario:</strong> {{ user.get_username }}</p>
-    </div>
-
-    <div>
-      <p>Puedes volver al panel o continuar con el flujo de eliminación. El flujo de eliminación borrará la cuenta correspondiente en Keycloak usando la cuenta de servicio del admin API configurada para este proyecto.</p>
-    </div>
-
-    <div>
-      <a class="btn btn-primary" href="/dashboard/">Volver al panel</a>
-      <a class="btn btn-danger" href="/delete-account/">Eliminar cuenta</a>
-    </div>
+    <section class="card">
+      <h2 class="hexed">Zona de riesgo</h2>
+      <p class="muted" style="margin-top:12px">
+        Eliminar la cuenta borra el usuario en Keycloak de forma definitiva. No se puede deshacer.
+      </p>
+      <div class="btn-group">
+        <a class="btn btn-secondary" href="/dashboard/">Volver al panel</a>
+        <a class="btn btn-danger" href="{% url 'delete_account' %}">Eliminar cuenta</a>
+      </div>
+    </section>
   </div>
 {% endblock %}

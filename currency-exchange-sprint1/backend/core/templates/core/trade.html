@@ -1,28 +1,291 @@
 {% extends 'core/base.html' %}
-{% block title %}Exchange Pro | Comprar divisas{% endblock %}
+{% load money %}
+{% block title %}Exchange Pro | Comprar y vender{% endblock %}
+{% block topbar_title %}Comprar y vender divisas{% endblock %}
+{% block topbar_actions %}
+  <span class="balance-chip">Saldo <strong>Gs. {{ wallet.pyg_balance|gs }}</strong></span>
+  <a class="btn btn-secondary btn-sm" href="{% url 'wallet' %}">Mi billetera</a>
+{% endblock %}
 {% block content %}
-  <div class="card stack">
-    <div>
-      <h1>Comprar divisas</h1>
-      <p class="muted">Usa tu saldo en USD para comprar divisas hacia tu billetera personal.</p>
-    </div>
+  <div class="stack-lg">
 
-    <div>
-      <p><strong>Saldo disponible:</strong> ${{ wallet.usd_balance }} USD</p>
-    </div>
+    {# ---- Pizarra: cada fila lleva directo al formulario con la divisa puesta ---- #}
+    <section class="card">
+      <div class="card-head row-between">
+        <h2 class="hexed">Pizarra de cotizaciones</h2>
+        <span class="muted small">Compra: lo que te pagamos · Venta: lo que te cobramos</span>
+      </div>
+      <div class="scroll-x">
+        <table>
+          <thead>
+            <tr>
+              <th>Divisa</th>
+              <th class="num">Compra</th>
+              <th class="num">Venta</th>
+              <th class="num">Margen</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for currency in currencies %}
+              <tr>
+                <td>
+                  <span class="coin-row">
+                    <span class="coin" aria-hidden="true">{{ currency.code }}</span>
+                    <span class="coin-name">
+                      <span class="coin-code">{{ currency.code }}</span>
+                      <span class="coin-full">{{ currency.name }}</span>
+                    </span>
+                  </span>
+                </td>
+                <td class="num rate-cell rate-buy">{{ currency.buy_rate|rate }}</td>
+                <td class="num rate-cell rate-sell">{{ currency.sell_rate|rate }}</td>
+                <td class="num muted">{{ currency.spread_percent }} %</td>
+                <td class="table-actions">
+                  <a class="btn btn-secondary btn-sm" href="{% url 'currency_history' %}?currency={{ currency.id }}&days=30">Historial</a>
+                  <a class="btn btn-primary btn-sm" href="?currency={{ currency.id }}#comprar">Comprar</a>
+                </td>
+              </tr>
+            {% empty %}
+              <tr><td colspan="5" class="muted">No hay divisas activas todavía.</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </section>
 
-    <form method="post">
-      {% csrf_token %}
-      {% for field in form %}
-        <div class="field">
-          <label>{{ field.label }}</label>
-          {{ field }}
-          {% if field.help_text %}<span class="helptext">{{ field.help_text }}</span>{% endif %}
-          {{ field.errors }}
+    {# ---- Comprar ---- #}
+    <section class="card card-raised" id="comprar">
+      <div class="card-head">
+        <h2 class="hexed">Comprar divisa con guaraníes</h2>
+        <p class="muted small" style="margin-top:8px">
+          Se aplica el <strong>precio de venta</strong>. Podés pagar con tu saldo o directo con una
+          tarjeta registrada.
+        </p>
+      </div>
+
+      <form method="post">
+        {% csrf_token %}
+        <input type="hidden" name="action" value="buy">
+        <div class="form-inline">
+          {% for field in buy_form %}
+            <div class="field">
+              <label for="{{ field.id_for_label }}">{{ field.label }}</label>
+              {{ field }}
+              {{ field.errors }}
+            </div>
+          {% endfor %}
         </div>
-      {% endfor %}
-      <button class="btn btn-primary" type="submit">Comprar</button>
-      <a class="btn btn-secondary" href="{% url 'wallet' %}">Ver mi billetera</a>
-    </form>
+        {% if buy_form.non_field_errors %}
+          <ul class="errorlist">{% for error in buy_form.non_field_errors %}<li>{{ error }}</li>{% endfor %}</ul>
+        {% endif %}
+
+        {# Vista previa de la conversión, antes de confirmar la compra. #}
+        <div class="preview" id="buy-preview" aria-live="polite">
+          <h3 class="preview-title">Vista previa de la operación</h3>
+
+          <p class="preview-empty" id="preview-empty">
+            Elegí una divisa y escribí un monto para ver cuánto vas a recibir antes de confirmar.
+          </p>
+
+          <div class="preview-body" id="preview-body" hidden>
+            <div class="preview-flow">
+              <div class="preview-side">
+                <span class="preview-label">Entregás</span>
+                <span class="preview-value" id="preview-pay">—</span>
+                <span class="preview-unit">guaraníes</span>
+              </div>
+              <div class="preview-arrow" aria-hidden="true"></div>
+              <div class="preview-side preview-side-get">
+                <span class="preview-label">Recibís</span>
+                <span class="preview-value" id="preview-get">—</span>
+                <span class="preview-unit" id="preview-get-code">—</span>
+              </div>
+            </div>
+
+            <p class="preview-rate">
+              Cotización aplicada: precio de venta de
+              <strong><span id="preview-rate-value">—</span> Gs.</strong>
+              por 1 <span id="preview-rate-code">—</span>.
+              <span id="preview-source" class="muted"></span>
+            </p>
+
+            {# Compara lo que pagás con lo que te devolverían si vendieras en el mismo
+               momento: la diferencia entre las barras es el margen de la casa de cambio. #}
+            <svg class="preview-chart" viewBox="0 0 600 124" role="img"
+                 aria-labelledby="preview-chart-title preview-chart-desc">
+              <title id="preview-chart-title">Comparación entre lo que pagás y el valor de reventa inmediata</title>
+              <desc id="preview-chart-desc">La barra superior es el monto que entregás; la inferior, lo que recibirías si vendieras la divisa de inmediato al precio de compra.</desc>
+
+              <text x="0" y="16" font-size="12" font-family="Inter, sans-serif" fill="#6e6080">PAGÁS AHORA</text>
+              <rect x="0" y="26" width="600" height="24" rx="4" fill="#6d28d9"></rect>
+              <text id="preview-bar-pay-label" x="590" y="43" font-size="13" font-weight="700"
+                    font-family="Inter, sans-serif" text-anchor="end" fill="#ffffff">—</text>
+
+              <text x="0" y="78" font-size="12" font-family="Inter, sans-serif" fill="#6e6080">VALOR SI VENDÉS DE INMEDIATO</text>
+              <rect x="0" y="88" width="600" height="24" rx="4" fill="#f4eefb"></rect>
+              <rect id="preview-bar-resale" x="0" y="88" width="0" height="24" rx="4" fill="#ec4899"></rect>
+              <text id="preview-bar-resale-label" x="10" y="105" font-size="13" font-weight="700"
+                    font-family="Inter, sans-serif" text-anchor="start" fill="#ffffff">—</text>
+            </svg>
+
+            <p class="preview-spread">
+              La diferencia, <strong><span id="preview-spread-value">—</span> Gs.</strong>
+              (<span id="preview-spread-percent">—</span> %), es el margen de la casa de cambio.
+              No es un costo escondido: es la distancia entre el precio de venta y el de compra.
+            </p>
+
+            <p class="preview-warning danger" id="preview-warning" hidden>
+              Tu saldo en guaraníes no alcanza para este monto. Elegí una tarjeta como medio de pago
+              o cargá saldo primero.
+            </p>
+          </div>
+
+          <noscript>
+            <p class="muted small">
+              La vista previa necesita JavaScript. Sin él la compra funciona igual: se aplica el
+              precio de venta que figura en la pizarra.
+            </p>
+          </noscript>
+        </div>
+
+        <button class="btn btn-primary" type="submit">Confirmar compra</button>
+      </form>
+    </section>
+
+    {# ---- Vender ---- #}
+    <section class="card" id="vender">
+      <div class="card-head">
+        <h2 class="hexed">Vender divisa y recibir guaraníes</h2>
+        {% if holdings %}
+          <p class="muted small" style="margin-top:8px">
+            Se aplica el <strong>precio de compra</strong> y los guaraníes se acreditan en tu saldo.
+          </p>
+        {% endif %}
+      </div>
+
+      {% if holdings %}
+        <form method="post">
+          {% csrf_token %}
+          <input type="hidden" name="action" value="sell">
+          <div class="form-inline">
+            {% for field in sell_form %}
+              <div class="field">
+                <label for="{{ field.id_for_label }}">{{ field.label }}</label>
+                {{ field }}
+                {{ field.errors }}
+              </div>
+            {% endfor %}
+            <button class="btn btn-accent" type="submit">Confirmar venta</button>
+          </div>
+        </form>
+
+        <div class="scroll-x" style="margin-top:20px">
+          <table>
+            <thead>
+              <tr><th>Tenés</th><th class="num">Cantidad</th><th class="num">Te pagamos</th><th></th></tr>
+            </thead>
+            <tbody>
+              {% for holding in holdings %}
+                <tr>
+                  <td>
+                    <span class="coin-row">
+                      <span class="coin" aria-hidden="true">{{ holding.currency.code }}</span>
+                      <span class="coin-name">
+                        <span class="coin-code">{{ holding.currency.code }}</span>
+                        <span class="coin-full">{{ holding.currency.name }}</span>
+                      </span>
+                    </span>
+                  </td>
+                  <td class="num">{{ holding.amount|units }}</td>
+                  <td class="num"><strong>Gs. {{ holding.value_pyg|gs }}</strong></td>
+                  <td class="table-actions">
+                    <a class="btn btn-secondary btn-sm" href="?sell={{ holding.currency.id }}#vender">Elegir</a>
+                  </td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      {% else %}
+        <p class="muted">
+          Todavía no tenés divisas para vender. Comprá alguna arriba y aparecerá acá.
+        </p>
+      {% endif %}
+    </section>
   </div>
+
+  {{ rate_table|json_script:"rate-table" }}
+  {{ wallet_balance_json|json_script:"wallet-balance" }}
+  <script>
+    // Vista previa de la compra: recalcula en el navegador cuánta divisa recibirá
+    // el usuario, con las mismas reglas que aplica el servidor en _process_buy()
+    // (se divide por el precio de venta y se redondea hacia abajo a 6 decimales).
+    (function () {
+      var rates = JSON.parse(document.getElementById('rate-table').textContent);
+      var balance = parseFloat(JSON.parse(document.getElementById('wallet-balance').textContent));
+
+      var currencyField = document.getElementById('id_buy_currency');
+      var amountField = document.getElementById('id_buy_pyg_amount');
+      var sourceField = document.getElementById('id_buy_payment_source');
+      if (!currencyField || !amountField) { return; }
+
+      var empty = document.getElementById('preview-empty');
+      var body = document.getElementById('preview-body');
+      var warning = document.getElementById('preview-warning');
+
+      var gs = new Intl.NumberFormat('es-PY', { maximumFractionDigits: 0 });
+      var units = new Intl.NumberFormat('es-PY', { minimumFractionDigits: 2, maximumFractionDigits: 6 });
+      var pct = new Intl.NumberFormat('es-PY', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+      function setText(id, value) { document.getElementById(id).textContent = value; }
+
+      function update() {
+        var rate = rates[currencyField.value];
+        var amount = parseFloat(amountField.value);
+
+        if (!rate || !isFinite(amount) || amount <= 0) {
+          empty.hidden = false;
+          body.hidden = true;
+          return;
+        }
+
+        var sellRate = parseFloat(rate.sell_rate);
+        var buyRate = parseFloat(rate.buy_rate);
+        // Hacia abajo a 6 decimales, igual que ROUND_DOWN en el servidor.
+        var received = Math.floor((amount / sellRate) * 1e6) / 1e6;
+        var resale = Math.round(received * buyRate);
+        var spread = amount - resale;
+
+        empty.hidden = true;
+        body.hidden = false;
+
+        setText('preview-pay', gs.format(amount));
+        setText('preview-get', received > 0 ? units.format(received) : '0,00');
+        setText('preview-get-code', rate.code);
+        setText('preview-rate-value', gs.format(sellRate));
+        setText('preview-rate-code', rate.code);
+        setText('preview-spread-value', gs.format(spread));
+        setText('preview-spread-percent', pct.format(amount > 0 ? (spread / amount) * 100 : 0));
+
+        // Las barras: la de arriba siempre llena, la de abajo en proporción.
+        var ratio = amount > 0 ? Math.max(0, Math.min(1, resale / amount)) : 0;
+        document.getElementById('preview-bar-resale').setAttribute('width', (600 * ratio).toFixed(1));
+        setText('preview-bar-pay-label', 'Gs. ' + gs.format(amount));
+        setText('preview-bar-resale-label', 'Gs. ' + gs.format(resale));
+
+        var payingFromBalance = !sourceField || sourceField.value === 'wallet';
+        if (sourceField) {
+          var option = sourceField.options[sourceField.selectedIndex];
+          setText('preview-source', option ? 'Se cobrará de: ' + option.text : '');
+        }
+        warning.hidden = !(payingFromBalance && amount > balance);
+      }
+
+      currencyField.addEventListener('change', update);
+      amountField.addEventListener('input', update);
+      if (sourceField) { sourceField.addEventListener('change', update); }
+      update();
+    })();
+  </script>
 {% endblock %}

@@ -1,0 +1,133 @@
+{% extends 'core/base.html' %}
+{% load money %}
+{% block title %}Exchange Pro | Simulación{% endblock %}
+{% block topbar_title %}Simulación del paso del tiempo{% endblock %}
+{% block topbar_actions %}
+  <span class="balance-chip">Día simulado <strong>{{ state.current_date|date:'d/m/Y' }}</strong></span>
+{% endblock %}
+{% block content %}
+  <div class="stack-lg">
+    <section class="card card-raised">
+      <div class="card-head">
+        <h1>Adelantar el reloj</h1>
+        <p class="muted">
+          Cada día simulado, toda divisa activa varía un porcentaje al azar entre
+          <strong>{{ min_change_percent }} %</strong> y <strong>+{{ max_change_percent }} %</strong>,
+          y queda un punto nuevo en el historial.
+        </p>
+      </div>
+
+      <div class="kpis" style="margin-bottom:20px">
+        <div class="kpi kpi-accent">
+          <span class="kpi-label">Día simulado actual</span>
+          <span class="kpi-value">{{ state.current_date|date:'d/m/Y' }}</span>
+        </div>
+        <div class="kpi">
+          <span class="kpi-label">Días adelantados</span>
+          <span class="kpi-value">{{ state.days_advanced }}</span>
+        </div>
+      </div>
+
+      <div class="btn-group">
+        <form method="post" action="{% url 'simulation_advance_day' %}">
+          {% csrf_token %}
+          <button class="btn btn-primary" type="submit">Avanzar un día</button>
+        </form>
+        {# Una semana en un clic en lugar de siete: es la acción más repetida del panel. #}
+        <form method="post" action="{% url 'simulation_advance_week' %}">
+          {% csrf_token %}
+          <button class="btn btn-accent" type="submit">Avanzar una semana</button>
+        </form>
+        <a class="btn btn-secondary" href="{% url 'currency_history' %}">Ver el historial</a>
+      </div>
+      <p class="helptext" style="margin-top:12px">
+        El mismo porcentaje se aplica al precio de compra y al de venta, así que el margen se mantiene
+        y la compra nunca termina por encima de la venta.
+      </p>
+    </section>
+
+    {% if last_changes %}
+      <section class="card">
+        <div class="card-head row-between">
+          <h2 class="hexed">
+            {% if last_simulation_days == 1 %}Qué cambió en el último día simulado
+            {% else %}Qué cambió en los últimos {{ last_simulation_days }} días simulados{% endif %}
+          </h2>
+          <span class="muted small">Variación neta del período</span>
+        </div>
+        <div class="scroll-x">
+          <table>
+            <thead>
+              <tr>
+                <th>Divisa</th>
+                <th class="num">Compra antes</th><th class="num">Compra ahora</th>
+                <th class="num">Venta antes</th><th class="num">Venta ahora</th>
+                <th class="num">Variación</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for change in last_changes %}
+                <tr>
+                  <td>
+                    <span class="coin-row">
+                      <span class="coin" aria-hidden="true">{{ change.code }}</span>
+                      <span class="coin-name">
+                        <span class="coin-code">{{ change.code }}</span>
+                        <span class="coin-full">{{ change.name }}</span>
+                      </span>
+                    </span>
+                  </td>
+                  <td class="num muted">{{ change.previous_buy|rate }}</td>
+                  <td class="num rate-cell rate-buy">{{ change.new_buy|rate }}</td>
+                  <td class="num muted">{{ change.previous_sell|rate }}</td>
+                  <td class="num rate-cell rate-sell">{{ change.new_sell|rate }}</td>
+                  <td class="num">
+                    <span class="delta {% if change.went_up %}delta-up{% else %}delta-down{% endif %}">
+                      {% if change.went_up %}▲ +{% else %}▼ {% endif %}{{ change.change_percent }} %
+                    </span>
+                  </td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </section>
+    {% endif %}
+
+    <section class="card">
+      <div class="card-head">
+        <h2 class="hexed">Cotizaciones vigentes</h2>
+      </div>
+      <div class="scroll-x">
+        <table>
+          <thead>
+            <tr><th>Divisa</th><th class="num">Compra (Gs.)</th><th class="num">Venta (Gs.)</th><th class="num">Margen</th><th></th></tr>
+          </thead>
+          <tbody>
+            {% for currency in currencies %}
+              <tr>
+                <td>
+                  <span class="coin-row">
+                    <span class="coin" aria-hidden="true">{{ currency.code }}</span>
+                    <span class="coin-name">
+                      <span class="coin-code">{{ currency.code }}</span>
+                      <span class="coin-full">{{ currency.name }}</span>
+                    </span>
+                  </span>
+                </td>
+                <td class="num rate-cell rate-buy">{{ currency.buy_rate|rate }}</td>
+                <td class="num rate-cell rate-sell">{{ currency.sell_rate|rate }}</td>
+                <td class="num muted">{{ currency.spread_percent }} %</td>
+                <td class="table-actions">
+                  <a class="btn btn-secondary btn-sm" href="{% url 'currency_history' %}?currency={{ currency.id }}&days=30">Historial</a>
+                </td>
+              </tr>
+            {% empty %}
+              <tr><td colspan="5" class="muted">No hay divisas activas para simular.</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  </div>
+{% endblock %}

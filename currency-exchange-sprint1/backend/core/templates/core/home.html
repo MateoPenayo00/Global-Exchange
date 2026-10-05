@@ -1,32 +1,97 @@
 {% extends 'core/base.html' %}
+{% load money %}
 {% block title %}Exchange Pro | Inicio{% endblock %}
+{% block topbar_title %}Inicio{% endblock %}
+{% block topbar_actions %}
+  <a class="btn btn-secondary btn-sm" href="{% url 'currency_history' %}">Ver cotizaciones</a>
+{% endblock %}
 {% block content %}
-  <div class="card stack">
-    <div>
+  <div class="stack-lg">
+    <section class="hero">
       <h1>Cambio de divisas rápido y transparente</h1>
-      <p class="muted">Exchange Pro es una plataforma ficticia para acceso seguro a cuentas y futuros servicios internacionales de dinero.</p>
-    </div>
+      <p>
+        Operamos en <strong style="color:#f9a8d4">guaraníes</strong>. Cada divisa tiene un precio de
+        compra y uno de venta a la vista, sin cargos escondidos: antes de confirmar cualquier
+        operación ves exactamente cuánto vas a recibir.
+      </p>
+      {% if user.is_authenticated %}
+        <div class="btn-group" style="margin-top:24px">
+          <a class="btn btn-accent" href="/dashboard/">Ir al panel</a>
+          <a class="btn btn-secondary" href="/account/">Mi cuenta</a>
+        </div>
+      {% else %}
+        <div class="btn-group" style="margin-top:24px">
+          <a class="btn btn-accent" href="/login/">Iniciar sesión</a>
+          <a class="btn btn-secondary" href="/register/">Crear cuenta</a>
+        </div>
+      {% endif %}
+    </section>
 
-    <div>
-      <p>Esta versión de Sprint 1 se centra en identidad y control de acceso. Las siguientes fases podrán añadir cotizaciones de cambio, alta de clientes y flujos de transferencias una vez que la autenticación esté estable.</p>
-      <ul>
-        <li>El inicio de sesión y el registro en el navegador los gestiona Keycloak.</li>
-        <li>La aplicación Django muestra la página principal y el panel de usuario.</li>
-        <li>La eliminación de cuentas se realiza a través de una cuenta de servicio con acceso al admin API de Keycloak.</li>
-      </ul>
-    </div>
+    <section class="card">
+      <div class="card-head row-between">
+        <h2 class="hexed">Pizarra de hoy</h2>
+        <span class="muted small">Compra: lo que te pagamos · Venta: lo que te cobramos</span>
+      </div>
+      <div class="scroll-x">
+        <table>
+          <thead>
+            <tr>
+              <th>Divisa</th>
+              <th class="num">Compra (Gs.)</th>
+              <th class="num">Venta (Gs.)</th>
+              <th class="num">Margen</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for currency in featured_currencies %}
+              <tr>
+                <td>
+                  <span class="coin-row">
+                    <span class="coin" aria-hidden="true">{{ currency.code }}</span>
+                    <span class="coin-name">
+                      <span class="coin-code">{{ currency.code }}</span>
+                      <span class="coin-full">{{ currency.name }}</span>
+                    </span>
+                  </span>
+                </td>
+                <td class="num rate-cell rate-buy">{{ currency.buy_rate|rate }}</td>
+                <td class="num rate-cell rate-sell">{{ currency.sell_rate|rate }}</td>
+                <td class="num muted">{{ currency.spread_percent }} %</td>
+                <td class="table-actions">
+                  <a class="btn btn-secondary btn-sm" href="{% url 'currency_history' %}?currency={{ currency.id }}&days=30">Historial</a>
+                  {% if can_trade %}
+                    <a class="btn btn-primary btn-sm" href="{% url 'trade' %}?currency={{ currency.id }}">Comprar</a>
+                  {% endif %}
+                </td>
+              </tr>
+            {% empty %}
+              <tr><td colspan="5" class="muted">Todavía no hay divisas cargadas.</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </section>
 
-    {% if user.is_authenticated %}
-      <p>Has iniciado sesión como <strong>{{ user.get_username }}</strong>.</p>
-      <div>
-        <a class="btn btn-primary" href="/dashboard/">Ir al panel</a>
-        <a class="btn btn-secondary" href="/account/">Página de cuenta</a>
+    <section class="card">
+      <h2 class="hexed">Cómo funciona</h2>
+      <div class="kpis" style="margin-top:16px">
+        <div class="kpi">
+          <span class="kpi-label">Paso 1</span>
+          <span class="kpi-value" style="font-size:1.0625rem">Registrá una tarjeta</span>
+          <span class="kpi-note">Guardamos sólo los últimos cuatro dígitos.</span>
+        </div>
+        <div class="kpi">
+          <span class="kpi-label">Paso 2</span>
+          <span class="kpi-value" style="font-size:1.0625rem">Cargá saldo en guaraníes</span>
+          <span class="kpi-note">O pagá la compra directo con la tarjeta.</span>
+        </div>
+        <div class="kpi">
+          <span class="kpi-label">Paso 3</span>
+          <span class="kpi-value" style="font-size:1.0625rem">Comprá y vendé divisas</span>
+          <span class="kpi-note">Con la conversión a la vista antes de confirmar.</span>
+        </div>
       </div>
-    {% else %}
-      <div>
-        <a class="btn btn-primary" href="/login/">Iniciar sesión</a>
-        <a class="btn btn-secondary" href="/register/">Crear cuenta</a>
-      </div>
-    {% endif %}
+    </section>
   </div>
 {% endblock %}

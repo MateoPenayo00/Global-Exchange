@@ -1,50 +1,113 @@
 {% extends 'core/base.html' %}
+{% load money %}
 {% block title %}Exchange Pro | Mi billetera{% endblock %}
+{% block topbar_title %}Mi billetera{% endblock %}
+{% block topbar_actions %}
+  <span class="balance-chip">Saldo <strong>Gs. {{ wallet.pyg_balance|gs }}</strong></span>
+  <a class="btn btn-primary btn-sm" href="{% url 'trade' %}">Comprar y vender</a>
+{% endblock %}
 {% block content %}
-  <div class="stack">
-    <div class="card stack">
-      <div>
-        <h1>Mi billetera</h1>
-        <p class="muted">USD es la divisa universal: tu saldo se guarda en dólares y se usa para comprar otras divisas.</p>
+  <div class="stack-lg">
+    <section class="kpis">
+      <div class="kpi kpi-accent">
+        <span class="kpi-label">Saldo en guaraníes</span>
+        <span class="kpi-value">Gs. {{ wallet.pyg_balance|gs }}</span>
+        <span class="kpi-note">Disponible para comprar divisas</span>
+      </div>
+      <div class="kpi">
+        <span class="kpi-label">Valor de tus divisas</span>
+        <span class="kpi-value">Gs. {{ wallet.holdings_value_pyg|gs }}</span>
+        <span class="kpi-note">Al precio de compra de hoy</span>
+      </div>
+      <div class="kpi">
+        <span class="kpi-label">Total</span>
+        <span class="kpi-value">Gs. {{ wallet.total_value_pyg|gs }}</span>
+        <span class="kpi-note">Saldo más tenencias</span>
+      </div>
+    </section>
+
+    {# ---- Carga de saldo: atajos de monto y tarjeta en un solo formulario ---- #}
+    <section class="card">
+      <div class="card-head">
+        <h2 class="hexed">Cargar saldo</h2>
       </div>
 
-      <div>
-        <p style="font-size:28px; margin:0;"><strong>${{ wallet.usd_balance }}</strong> <span class="muted" style="font-size:14px;">USD disponibles</span></p>
-      </div>
-
-      <div style="display:flex; gap:24px; flex-wrap:wrap;">
-        <form method="post" action="{% url 'wallet_deposit' %}" style="display:flex; gap:8px; align-items:end; flex-wrap:wrap;">
+      {% if has_payment_method %}
+        <form method="post" action="{% url 'wallet_deposit' %}" class="stack">
           {% csrf_token %}
-          <div class="field" style="margin-bottom:0;">
-            <label>{{ deposit_form.amount.label }}</label>
-            {{ deposit_form.amount }}
+          <div class="chips" role="group" aria-label="Montos rápidos">
+            {% for preset in deposit_presets %}
+              <button class="chip" type="button" data-amount="{{ preset }}">Gs. {{ preset|gs }}</button>
+            {% endfor %}
           </div>
-          <button class="btn btn-primary" type="submit">Cargar saldo</button>
+          <div class="form-inline">
+            <div class="field">
+              <label for="{{ deposit_form.amount.id_for_label }}">{{ deposit_form.amount.label }}</label>
+              {{ deposit_form.amount }}
+            </div>
+            <div class="field">
+              <label for="{{ deposit_form.payment_method.id_for_label }}">{{ deposit_form.payment_method.label }}</label>
+              {{ deposit_form.payment_method }}
+            </div>
+            <button class="btn btn-primary" type="submit">Cargar saldo</button>
+          </div>
         </form>
-
-        <form method="post" action="{% url 'wallet_deposit_test' %}">
+        <form method="post" action="{% url 'wallet_deposit_test' %}" style="margin-top:12px">
           {% csrf_token %}
-          <button class="btn btn-secondary" type="submit">Cargar ${{ test_deposit_amount }} de prueba</button>
+          <button class="btn btn-secondary btn-sm" type="submit">
+            Cargar Gs. {{ test_deposit_amount|gs }} de prueba en un clic
+          </button>
         </form>
-      </div>
-    </div>
+        <script>
+          // Los atajos sólo rellenan el campo: el envío sigue siendo del formulario.
+          document.querySelectorAll('.chip[data-amount]').forEach(function (chip) {
+            chip.addEventListener('click', function () {
+              var field = document.getElementById('{{ deposit_form.amount.id_for_label }}');
+              field.value = chip.dataset.amount;
+              field.focus();
+            });
+          });
+        </script>
+      {% else %}
+        <div class="notice">
+          <span>
+            Para cargar saldo necesitás al menos una tarjeta registrada.
+            Agregala abajo: te toma unos segundos.
+          </span>
+        </div>
+      {% endif %}
+    </section>
 
-    <div class="card stack">
-      <h2>Mis divisas</h2>
-      {% if holdings %}
-        <div style="overflow-x:auto;">
+    {# ---- Tarjetas, con el alta desplegable en la misma página ---- #}
+    <section class="card">
+      <div class="card-head row-between">
+        <h2 class="hexed">Mis medios de pago</h2>
+        <span class="muted small">Sólo se guardan los últimos cuatro dígitos</span>
+      </div>
+
+      {% if payment_methods %}
+        <div class="scroll-x">
           <table>
-            <thead><tr><th>Divisa</th><th>Cantidad</th><th>Valor estimado (USD)</th><th>Retiro rápido</th></tr></thead>
+            <thead>
+              <tr><th>Alias</th><th>Marca</th><th>Número</th><th>Titular</th><th>Vence</th><th></th></tr>
+            </thead>
             <tbody>
-              {% for holding in holdings %}
+              {% for card in payment_methods %}
                 <tr>
-                  <td>{{ holding.currency.code }} — {{ holding.currency.name }}</td>
-                  <td>{{ holding.amount }}</td>
-                  <td>${{ holding.amount|floatformat:2 }} × {{ holding.currency.value_in_usd }}</td>
+                  <td><strong>{{ card.label }}</strong></td>
+                  <td>{{ card.get_brand_display }}</td>
+                  <td class="num">{{ card.masked_number }}</td>
+                  <td>{{ card.holder_name }}</td>
                   <td>
-                    <form method="post" action="{% url 'wallet_withdraw_test' holding.currency.id %}" style="display:inline;">
+                    {{ card.expiry_display }}
+                    {% if card.is_expired %}<span class="tag tag-down">vencida</span>{% endif %}
+                  </td>
+                  <td class="table-actions">
+                    {# Baja en un solo clic, con confirmación del navegador. #}
+                    <form method="post" action="{% url 'payment_method_delete' card.id %}"
+                          onsubmit="return confirm('¿Eliminar la tarjeta {{ card.masked_number }}? Tus movimientos anteriores se conservan.');">
                       {% csrf_token %}
-                      <button class="btn btn-secondary" type="submit">Retirar {{ test_withdraw_amount }} (prueba)</button>
+                      <button class="btn btn-danger btn-sm" type="submit">Eliminar</button>
                     </form>
                   </td>
                 </tr>
@@ -53,42 +116,145 @@
           </table>
         </div>
       {% else %}
-        <p class="muted">Todavía no tienes divisas en tu billetera. Ve a <a href="{% url 'trade' %}">Comprar divisas</a>.</p>
+        <p class="muted">Todavía no registraste ninguna tarjeta.</p>
       {% endif %}
-    </div>
+
+      <details class="disclosure" style="margin-top:16px" {% if not payment_methods %}open{% endif %}>
+        <summary>Agregar una tarjeta</summary>
+        <div class="disclosure-body">
+          <div class="notice" style="margin-bottom:16px">
+            <span>
+              <strong>No uses una tarjeta real.</strong> Es un proyecto de aprendizaje. Podés probar con
+              <code>4111 1111 1111 1111</code> (Visa), <code>5500 0000 0000 0004</code> (Mastercard)
+              o <code>3400 0000 0000 009</code> (Amex).
+            </span>
+          </div>
+          <form method="post" action="{% url 'payment_method_create' %}">
+            {% csrf_token %}
+            {% if card_form.non_field_errors %}
+              <ul class="errorlist">{% for error in card_form.non_field_errors %}<li>{{ error }}</li>{% endfor %}</ul>
+            {% endif %}
+            {% for field in card_form %}
+              <div class="field">
+                <label for="{{ field.id_for_label }}">{{ field.label }}</label>
+                {{ field }}
+                {% if field.help_text %}<span class="helptext">{{ field.help_text }}</span>{% endif %}
+                {{ field.errors }}
+              </div>
+            {% endfor %}
+            <button class="btn btn-accent" type="submit">Guardar tarjeta</button>
+          </form>
+        </div>
+      </details>
+    </section>
+
+    {# ---- Tenencias ---- #}
+    <section class="card">
+      <div class="card-head row-between">
+        <h2 class="hexed">Mis divisas</h2>
+        {% if holdings %}<span class="muted small">Valuadas al precio de compra de hoy</span>{% endif %}
+      </div>
+      {% if holdings %}
+        <div class="scroll-x">
+          <table>
+            <thead>
+              <tr>
+                <th>Divisa</th>
+                <th class="num">Cantidad</th>
+                <th class="num">Precio de compra</th>
+                <th class="num">Valor si vendés hoy</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for holding in holdings %}
+                <tr>
+                  <td>
+                    <span class="coin-row">
+                      <span class="coin" aria-hidden="true">{{ holding.currency.code }}</span>
+                      <span class="coin-name">
+                        <span class="coin-code">{{ holding.currency.code }}</span>
+                        <span class="coin-full">{{ holding.currency.name }}</span>
+                      </span>
+                    </span>
+                  </td>
+                  <td class="num">{{ holding.amount|units }}</td>
+                  <td class="num rate-cell rate-buy">{{ holding.currency.buy_rate|rate }}</td>
+                  <td class="num"><strong>Gs. {{ holding.value_pyg|gs }}</strong></td>
+                  <td class="table-actions">
+                    <a class="btn btn-primary btn-sm" href="{% url 'trade' %}?sell={{ holding.currency.id }}#vender">Vender</a>
+                    <form method="post" action="{% url 'wallet_withdraw_test' holding.currency.id %}">
+                      {% csrf_token %}
+                      <button class="btn btn-secondary btn-sm" type="submit">Retirar {{ test_withdraw_amount|units }}</button>
+                    </form>
+                  </td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      {% else %}
+        <p class="muted">
+          Todavía no tenés divisas. Andá a <a href="{% url 'trade' %}">Comprar y vender</a> para empezar.
+        </p>
+      {% endif %}
+    </section>
 
     {% if holdings %}
-      <div class="card stack">
-        <h2>Retirar divisas</h2>
-        <form method="post" action="{% url 'wallet_withdraw' %}" style="display:flex; gap:12px; align-items:end; flex-wrap:wrap;">
+      <section class="card">
+        <div class="card-head">
+          <h2 class="hexed">Retirar divisas</h2>
+          <p class="muted small" style="margin-top:8px">
+            Un retiro saca la divisa de la billetera, como si la llevaras en efectivo. Si lo que querés
+            es recibir guaraníes, usá <a href="{% url 'trade' %}#vender">Vender</a>.
+          </p>
+        </div>
+        <form method="post" action="{% url 'wallet_withdraw' %}" class="form-inline">
           {% csrf_token %}
-          <div class="field" style="margin-bottom:0;">
-            <label>{{ withdraw_form.currency.label }}</label>
+          <div class="field">
+            <label for="{{ withdraw_form.currency.id_for_label }}">{{ withdraw_form.currency.label }}</label>
             {{ withdraw_form.currency }}
           </div>
-          <div class="field" style="margin-bottom:0;">
-            <label>{{ withdraw_form.amount.label }}</label>
+          <div class="field">
+            <label for="{{ withdraw_form.amount.id_for_label }}">{{ withdraw_form.amount.label }}</label>
             {{ withdraw_form.amount }}
           </div>
           <button class="btn btn-danger" type="submit">Retirar</button>
         </form>
-      </div>
+      </section>
     {% endif %}
 
-    <div class="card stack">
-      <h2>Movimientos recientes</h2>
+    {# ---- Movimientos ---- #}
+    <section class="card">
+      <div class="card-head row-between">
+        <h2 class="hexed">Movimientos recientes</h2>
+        <span class="muted small">Últimos 20</span>
+      </div>
       {% if transactions %}
-        <div style="overflow-x:auto;">
+        <div class="scroll-x">
           <table>
-            <thead><tr><th>Fecha</th><th>Tipo</th><th>Divisa</th><th>Cantidad</th><th>USD</th></tr></thead>
+            <thead>
+              <tr>
+                <th>Fecha</th><th>Tipo</th><th>Divisa</th>
+                <th class="num">Cantidad</th><th class="num">Guaraníes</th>
+                <th class="num">Cotización</th><th>Pagado con</th>
+              </tr>
+            </thead>
             <tbody>
               {% for tx in transactions %}
                 <tr>
-                  <td>{{ tx.created_at|date:'d/m/Y H:i' }}</td>
-                  <td>{{ tx.get_kind_display }}</td>
-                  <td>{{ tx.currency.code|default:'USD' }}</td>
-                  <td>{{ tx.amount }}</td>
-                  <td>${{ tx.usd_amount }}</td>
+                  <td class="muted">{{ tx.created_at|date:'d/m/Y H:i' }}</td>
+                  <td>
+                    {% if tx.kind == 'buy' %}<span class="tag tag-pink">Compra</span>
+                    {% elif tx.kind == 'sell' %}<span class="tag">Venta</span>
+                    {% elif tx.kind == 'deposit' %}<span class="tag tag-up">Carga</span>
+                    {% else %}<span class="tag tag-down">Retiro</span>{% endif %}
+                  </td>
+                  <td><strong>{{ tx.currency.code|default:base_currency_code }}</strong></td>
+                  <td class="num">{{ tx.amount|units }}</td>
+                  <td class="num">{{ tx.pyg_amount|gs }}</td>
+                  <td class="num muted">{% if tx.rate_used %}{{ tx.rate_used|rate }}{% else %}—{% endif %}</td>
+                  <td class="muted">{% if tx.payment_method %}{{ tx.payment_method.masked_number }}{% else %}Saldo{% endif %}</td>
                 </tr>
               {% endfor %}
             </tbody>
@@ -97,6 +263,6 @@
       {% else %}
         <p class="muted">Sin movimientos todavía.</p>
       {% endif %}
-    </div>
+    </section>
   </div>
 {% endblock %}

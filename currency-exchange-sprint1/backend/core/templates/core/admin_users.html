@@ -1,44 +1,53 @@
 {% extends 'core/base.html' %}
 {% block title %}Exchange Pro | Usuarios{% endblock %}
+{% block topbar_title %}Gestión de usuarios{% endblock %}
+{% block topbar_actions %}
+  <a class="btn btn-primary btn-sm" href="{% url 'admin_user_create' %}">Nuevo usuario</a>
+{% endblock %}
 {% block content %}
-  <div class="card stack">
-    <div style="display:flex; justify-content:space-between; align-items:center; gap:16px; flex-wrap:wrap;">
-      <div>
-        <h1>Gestión de usuarios</h1>
-        <p class="muted">Crea, edita roles y elimina cuentas de Keycloak.</p>
+  <div class="stack-lg">
+    <section class="card">
+      <div class="card-head">
+        <h1>Usuarios</h1>
+        <p class="muted">Las cuentas viven en Keycloak. Desde acá se crean, se les cambian los roles y se eliminan.</p>
       </div>
-      <a class="btn btn-primary" href="{% url 'admin_user_create' %}">Nuevo usuario</a>
-    </div>
 
-    <form method="get" class="nav-actions">
-      <input type="text" name="q" value="{{ search }}" placeholder="Buscar por nombre, usuario o correo">
-      <button class="btn btn-secondary" type="submit">Buscar</button>
-    </form>
+      <form method="get" class="form-inline" style="margin-bottom:20px">
+        <div class="field">
+          <label for="user-search">Buscar</label>
+          <input id="user-search" type="text" name="q" value="{{ search }}" placeholder="Nombre, usuario o correo">
+        </div>
+        <button class="btn btn-secondary" type="submit">Buscar</button>
+        {% if search %}<a class="btn btn-ghost" href="{% url 'admin_users' %}">Limpiar</a>{% endif %}
+      </form>
 
-    <div style="overflow-x:auto;">
-      <table>
-        <thead>
-          <tr><th>Usuario</th><th>Nombre</th><th>Correo</th><th>Roles</th><th>Estado</th><th>Acciones</th></tr>
-        </thead>
-        <tbody>
-          {% for u in users %}
-            <tr>
-              <td>{{ u.username }}</td>
-              <td>{{ u.first_name|default:'' }} {{ u.last_name|default:'' }}</td>
-              <td>{{ u.email|default:'—' }}</td>
-              <td>{% for r in u.roles %}<span class="tag">{{ r|capfirst }}</span>{% empty %}<span class="muted">—</span>{% endfor %}</td>
-              <td>{% if u.enabled %}Activo{% else %}<span class="danger">Deshabilitado</span>{% endif %}</td>
-              <td>
-                <a href="{% url 'admin_user_roles' u.id %}">Roles</a>
-                &nbsp;·&nbsp;
-                <a class="danger" href="{% url 'admin_user_delete' u.id %}">Eliminar</a>
-              </td>
-            </tr>
-          {% empty %}
-            <tr><td colspan="6" class="muted">No hay usuarios que mostrar.</td></tr>
-          {% endfor %}
-        </tbody>
-      </table>
-    </div>
+      <div class="scroll-x">
+        <table>
+          <thead>
+            <tr><th>Usuario</th><th>Nombre</th><th>Correo</th><th>Roles</th><th>Estado</th><th></th></tr>
+          </thead>
+          <tbody>
+            {% for u in users %}
+              <tr>
+                <td><strong>{{ u.username }}</strong></td>
+                <td>{{ u.first_name|default:'' }} {{ u.last_name|default:'' }}</td>
+                <td class="muted">{{ u.email|default:'—' }}</td>
+                <td>{% for r in u.roles %}<span class="tag">{{ r|capfirst }}</span>{% empty %}<span class="muted">—</span>{% endfor %}</td>
+                <td>
+                  {% if u.enabled %}<span class="tag tag-up">Activo</span>
+                  {% else %}<span class="tag tag-down">Deshabilitado</span>{% endif %}
+                </td>
+                <td class="table-actions">
+                  <a class="btn btn-secondary btn-sm" href="{% url 'admin_user_roles' u.id %}">Roles</a>
+                  <a class="btn btn-danger btn-sm" href="{% url 'admin_user_delete' u.id %}">Eliminar</a>
+                </td>
+              </tr>
+            {% empty %}
+              <tr><td colspan="6" class="muted">No hay usuarios que mostrar.</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </section>
   </div>
 {% endblock %}

@@ -1,0 +1,131 @@
+{% extends 'core/base.html' %}
+{% load money %}
+{% block title %}Exchange Pro | Cotizaciones{% endblock %}
+{% block topbar_title %}Historial de cotizaciones{% endblock %}
+{% block topbar_actions %}
+  <span class="balance-chip">Día simulado <strong>{{ simulated_today|date:'d/m/Y' }}</strong></span>
+{% endblock %}
+{% block content %}
+  <div class="stack-lg">
+    <section class="card card-tight">
+      <form method="get" class="form-inline">
+        {% for field in form %}
+          <div class="field">
+            <label for="{{ field.id_for_label }}">{{ field.label }}</label>
+            {{ field }}
+            {{ field.errors }}
+          </div>
+        {% endfor %}
+        <button class="btn btn-primary" type="submit">Ver historial</button>
+      </form>
+    </section>
+
+    {% if currency %}
+      <section class="card">
+        <div class="card-head row-between">
+          <span class="coin-row">
+            <span class="coin" aria-hidden="true">{{ currency.code }}</span>
+            <span class="coin-name">
+              <span class="coin-code" style="font-size:1.0625rem">{{ currency.code }} — {{ currency.name }}</span>
+              <span class="coin-full">
+                Compra <strong class="rate-buy">Gs. {{ currency.buy_rate|rate }}</strong> ·
+                Venta <strong class="rate-sell">Gs. {{ currency.sell_rate|rate }}</strong> ·
+                margen {{ currency.spread_percent }} %
+              </span>
+            </span>
+          </span>
+          {% if variation is not None %}
+            <div style="text-align:right">
+              <span class="kpi-label">Variación del período</span><br>
+              <span class="kpi-value delta {% if variation >= 0 %}delta-up{% else %}delta-down{% endif %}">
+                {% if variation >= 0 %}▲ +{% else %}▼ {% endif %}{{ variation }} %
+              </span>
+            </div>
+          {% endif %}
+        </div>
+
+        {% if chart.has_data %}
+          <div class="legend" style="margin-bottom:12px">
+            <span class="legend-item"><span class="legend-key legend-sell" aria-hidden="true"></span>Precio de venta</span>
+            <span class="legend-item"><span class="legend-key legend-buy" aria-hidden="true"></span>Precio de compra</span>
+          </div>
+          <div class="scroll-x">
+            <svg class="chart" viewBox="0 0 {{ chart.width }} {{ chart.height }}" role="img"
+                 aria-label="Historial de cotizaciones de {{ currency.code }}: línea de precio de venta y línea de precio de compra">
+              {# Líneas guía y escala vertical #}
+              {% for label in chart.y_labels %}
+                <line x1="{{ chart.plot_left }}" y1="{{ label.position }}"
+                      x2="{{ chart.plot_right }}" y2="{{ label.position }}"
+                      stroke="#e8dff5" stroke-width="1"></line>
+                <text x="{{ chart.plot_left }}" y="{{ label.position }}" dx="-10" dy="4"
+                      text-anchor="end" font-size="11" font-family="Inter, sans-serif"
+                      fill="#8b7fa0">{{ label.text }}</text>
+              {% endfor %}
+
+              {# Eje horizontal y fechas #}
+              <line x1="{{ chart.plot_left }}" y1="{{ chart.plot_bottom }}"
+                    x2="{{ chart.plot_right }}" y2="{{ chart.plot_bottom }}"
+                    stroke="#d4c4ec" stroke-width="1"></line>
+              {% for label in chart.x_labels %}
+                <text x="{{ label.position }}" y="{{ chart.plot_bottom }}" dy="20"
+                      text-anchor="middle" font-size="11" font-family="Inter, sans-serif"
+                      fill="#8b7fa0">{{ label.text }}</text>
+              {% endfor %}
+
+              {# Series: venta arriba en morado, compra abajo en rosa #}
+              <polyline points="{{ chart.sell_points }}" fill="none" stroke="#6d28d9"
+                        stroke-width="2" stroke-linejoin="round" stroke-linecap="round"></polyline>
+              <polyline points="{{ chart.buy_points }}" fill="none" stroke="#ec4899"
+                        stroke-width="2" stroke-linejoin="round" stroke-linecap="round"></polyline>
+            </svg>
+          </div>
+        {% else %}
+          <p class="muted">Esta divisa todavía no tiene cotizaciones en el período elegido.</p>
+        {% endif %}
+      </section>
+
+      <section class="card">
+        <div class="card-head row-between">
+          <h2 class="hexed">Detalle día por día</h2>
+          <span class="muted small">{{ rates|length }} día{{ rates|length|pluralize }}</span>
+        </div>
+        {% if rates %}
+          <div class="scroll-x">
+            <table>
+              <thead>
+                <tr>
+                  <th>Fecha</th>
+                  <th class="num">Compra (Gs.)</th>
+                  <th class="num">Venta (Gs.)</th>
+                  <th class="num">Promedio (Gs.)</th>
+                  <th>Origen</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for rate_point in rates %}
+                  <tr>
+                    <td>{{ rate_point.date|date:'d/m/Y' }}</td>
+                    <td class="num rate-cell rate-buy">{{ rate_point.buy_rate|rate }}</td>
+                    <td class="num rate-cell rate-sell">{{ rate_point.sell_rate|rate }}</td>
+                    <td class="num muted">{{ rate_point.mid_rate|rate }}</td>
+                    <td>
+                      {% if rate_point.source == 'simulacion' %}<span class="tag tag-pink">Simulación</span>
+                      {% elif rate_point.source == 'manual' %}<span class="tag">Carga manual</span>
+                      {% else %}<span class="tag tag-on-dark" style="background:var(--surface-sunken);color:var(--ink-500)">Valor inicial</span>{% endif %}
+                    </td>
+                  </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        {% else %}
+          <p class="muted">Sin datos para el período seleccionado.</p>
+        {% endif %}
+      </section>
+    {% else %}
+      <section class="card">
+        <p class="muted">No hay divisas cargadas todavía, así que no hay historial para mostrar.</p>
+      </section>
+    {% endif %}
+  </div>
+{% endblock %}
