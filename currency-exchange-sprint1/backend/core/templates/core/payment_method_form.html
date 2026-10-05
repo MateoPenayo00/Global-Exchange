@@ -1,0 +1,38 @@
+{% extends 'core/base.html' %}
+{% block title %}Exchange Pro | Agregar tarjeta{% endblock %}
+{% block topbar_title %}Agregar tarjeta de crédito{% endblock %}
+{% block content %}
+  <div class="card" style="max-width:640px">
+    <div class="card-head">
+      <h1>Agregar tarjeta de crédito</h1>
+    </div>
+
+    <div class="notice" style="margin-bottom:20px">
+      <span>
+        <strong>No uses una tarjeta real.</strong> Es una plataforma de aprendizaje. Del número que
+        ingreses se guardan sólo los últimos cuatro dígitos, la marca y el vencimiento.
+        Números de prueba: <code>4111 1111 1111 1111</code> (Visa),
+        <code>5500 0000 0000 0004</code> (Mastercard), <code>3400 0000 0000 009</code> (Amex).
+      </span>
+    </div>
+
+    <form method="post" action="{% url 'payment_method_create' %}">
+      {% csrf_token %}
+      {% if card_form.non_field_errors %}
+        <ul class="errorlist">{% for error in card_form.non_field_errors %}<li>{{ error }}</li>{% endfor %}</ul>
+      {% endif %}
+      {% for field in card_form %}
+        <div class="field">
+          <label for="{{ field.id_for_label }}">{{ field.label }}</label>
+          {{ field }}
+          {% if field.help_text %}<span class="helptext">{{ field.help_text }}</span>{% endif %}
+          {{ field.errors }}
+        </div>
+      {% endfor %}
+      <div class="btn-group">
+        <button class="btn btn-accent" type="submit">Guardar tarjeta</button>
+        <a class="btn btn-secondary" href="{% url 'wallet' %}">Cancelar</a>
+      </div>
+    </form>
+  </div>
+{% endblock %}

@@ -1,40 +1,77 @@
 {% extends 'core/base.html' %}
+{% load money %}
 {% block title %}Exchange Pro | Divisas{% endblock %}
+{% block topbar_title %}Gestión de divisas{% endblock %}
+{% block topbar_actions %}
+  <span class="balance-chip">Día simulado <strong>{{ simulated_today|date:'d/m/Y' }}</strong></span>
+  <a class="btn btn-primary btn-sm" href="{% url 'currency_create' %}">Nueva divisa</a>
+{% endblock %}
 {% block content %}
-  <div class="card stack">
-    <div style="display:flex; justify-content:space-between; align-items:center; gap:16px; flex-wrap:wrap;">
-      <div>
-        <h1>Gestión de divisas</h1>
-        <p class="muted">USD es la divisa universal (valor fijo 1.000000). Sube o baja el valor de las demás divisas frente al dólar.</p>
+  <div class="stack-lg">
+    <section class="card">
+      <div class="card-head">
+        <h1>Divisas y cotizaciones</h1>
+        <p class="muted">
+          El guaraní ({{ base_currency_code }}) es la divisa base y vale 1 por definición. Para el resto
+          definís el <strong>precio de compra</strong> (lo que paga la casa de cambio) y el
+          <strong>precio de venta</strong> (lo que cobra), siempre en guaraníes y con la compra por
+          debajo de la venta.
+        </p>
       </div>
-      <a class="btn btn-primary" href="{% url 'currency_create' %}">Nueva divisa</a>
-    </div>
 
-    <div style="overflow-x:auto;">
-      <table>
-        <thead>
-          <tr><th>Código</th><th>Nombre</th><th>Símbolo</th><th>Valor en USD</th><th>Estado</th><th>Acciones</th></tr>
-        </thead>
-        <tbody>
-          {% for currency in currencies %}
+      <div class="notice" style="margin-bottom:20px">
+        <span>
+          Los cambios de cotización se registran en el historial con la fecha del día simulado actual:
+          <strong>{{ simulated_today|date:'d/m/Y' }}</strong>.
+        </span>
+      </div>
+
+      <div class="scroll-x">
+        <table>
+          <thead>
             <tr>
-              <td><strong>{{ currency.code }}</strong>{% if currency.is_base %} <span class="tag">universal</span>{% endif %}</td>
-              <td>{{ currency.name }}</td>
-              <td>{{ currency.symbol|default:'—' }}</td>
-              <td>{{ currency.value_in_usd }}</td>
-              <td>{% if currency.is_active %}Activa{% else %}<span class="danger">Inactiva</span>{% endif %}</td>
-              <td>
-                <a href="{% url 'currency_edit' currency.id %}">Editar valor</a>
-                {% if not currency.is_base %}
-                  &nbsp;·&nbsp;<a class="danger" href="{% url 'currency_delete' currency.id %}">Eliminar</a>
-                {% endif %}
-              </td>
+              <th>Divisa</th><th>Símbolo</th>
+              <th class="num">Compra (Gs.)</th><th class="num">Venta (Gs.)</th><th class="num">Margen</th>
+              <th>Estado</th><th></th>
             </tr>
-          {% empty %}
-            <tr><td colspan="6" class="muted">No hay divisas cargadas todavía.</td></tr>
-          {% endfor %}
-        </tbody>
-      </table>
-    </div>
+          </thead>
+          <tbody>
+            {% for currency in currencies %}
+              <tr>
+                <td>
+                  <span class="coin-row">
+                    <span class="coin {% if currency.is_base %}coin-base{% endif %}" aria-hidden="true">{{ currency.code }}</span>
+                    <span class="coin-name">
+                      <span class="coin-code">
+                        {{ currency.code }}
+                        {% if currency.is_base %}<span class="tag tag-pink">base</span>{% endif %}
+                      </span>
+                      <span class="coin-full">{{ currency.name }}</span>
+                    </span>
+                  </span>
+                </td>
+                <td class="muted">{{ currency.symbol|default:'—' }}</td>
+                <td class="num rate-cell rate-buy">{{ currency.buy_rate|rate }}</td>
+                <td class="num rate-cell rate-sell">{{ currency.sell_rate|rate }}</td>
+                <td class="num muted">{% if currency.is_base %}—{% else %}{{ currency.spread_percent }} %{% endif %}</td>
+                <td>
+                  {% if currency.is_active %}<span class="tag tag-up">Activa</span>
+                  {% else %}<span class="tag tag-down">Inactiva</span>{% endif %}
+                </td>
+                <td class="table-actions">
+                  <a class="btn btn-secondary btn-sm" href="{% url 'currency_edit' currency.id %}">Editar</a>
+                  {% if not currency.is_base %}
+                    <a class="btn btn-ghost btn-sm" href="{% url 'currency_history' %}?currency={{ currency.id }}&days=30">Historial</a>
+                    <a class="btn btn-danger btn-sm" href="{% url 'currency_delete' currency.id %}">Eliminar</a>
+                  {% endif %}
+                </td>
+              </tr>
+            {% empty %}
+              <tr><td colspan="7" class="muted">No hay divisas cargadas todavía.</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </section>
   </div>
 {% endblock %}
