@@ -1,0 +1,45 @@
+{% load money %}
+<div class="scroll-x">
+  <table class="cash-tx-table">
+    <thead>
+      <tr>
+        <th>N.º</th>
+        <th>Hora</th>
+        <th>Cliente</th>
+        <th>Operación</th>
+        <th class="num">Entregó</th>
+        <th class="num">Recibió</th>
+        <th>Medio</th>
+        <th class="num">Valor (Gs.)</th>
+        {% if not printable %}<th class="no-print"></th>{% endif %}
+      </tr>
+    </thead>
+    <tbody>
+      {% for tx in transactions %}
+        <tr>
+          <td>#{{ tx.id }}</td>
+          <td>{{ tx.closed_at|date:"H:i" }}</td>
+          <td>
+            <span class="coin-name">
+              <span>{{ tx.customer_name }}</span>
+              <span class="coin-full">C.I. {{ tx.customer_document|ci }}</span>
+            </span>
+          </td>
+          <td>{{ tx.description }}</td>
+          <td class="num">{{ tx.amount_in|cash:tx.currency_in }}</td>
+          <td class="num">{{ tx.amount_out|cash:tx.currency_out }}</td>
+          <td>
+            {{ tx.get_payment_method_display }}
+            {% if tx.card_last4 %}<span class="muted small">{{ tx.get_card_brand_display }} •••• {{ tx.card_last4 }}</span>{% endif %}
+          </td>
+          <td class="num">{{ tx.pyg_value|gs }}</td>
+          {% if not printable %}
+            <td class="table-actions no-print">
+              <a class="btn btn-secondary btn-sm" href="{% url 'cash_operation' tx.id %}">Comprobante</a>
+            </td>
+          {% endif %}
+        </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>

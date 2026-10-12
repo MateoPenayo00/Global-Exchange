@@ -8,6 +8,8 @@ from decimal import Decimal, InvalidOperation
 
 from django import template
 
+from core.models import BASE_CURRENCY_CODE
+
 register = template.Library()
 
 
@@ -55,3 +57,42 @@ def units(value):
     normalized = number.normalize()
     decimals = max(-normalized.as_tuple().exponent, 2)
     return _format(number, min(decimals, 6))
+
+
+@register.filter(name="countdown")
+def countdown(value):
+    """Formatea segundos como un reloj de minutos: ``299`` -> ``4:59``."""
+    try:
+        seconds = max(0, int(value))
+    except (TypeError, ValueError):
+        return value
+    return f"{seconds // 60}:{seconds % 60:02d}"
+
+
+@register.filter(name="cash")
+def cash(value, currency):
+    """Monto de efectivo con su divisa: ``Gs. 1.500.000`` o ``250,00 USD``."""
+    number = _to_decimal(value)
+    if number is None:
+        return value
+    if getattr(currency, "code", currency) == BASE_CURRENCY_CODE:
+        return f"Gs. {guarani(number)}"
+    return f"{_format(number, 2)} {getattr(currency, 'code', currency)}"
+
+
+@register.filter(name="ci")
+def cedula(value):
+    """Cédula de identidad con puntos de miles: ``4567890`` -> ``4.567.890``."""
+    text = str(value or "")
+    if not text.isdigit():
+        return text
+    return _format(Decimal(text), 0)
+
+
+@register.filter(name="sub")
+def subtract(value, other):
+    """Resta dos montos decimales: ``{{ actual|sub:inicial }}``."""
+    a, b = _to_decimal(value), _to_decimal(other)
+    if a is None or b is None:
+        return ""
+    return a - b

@@ -1,5 +1,5 @@
 from datetime import timedelta
-from decimal import ROUND_DOWN, Decimal
+from decimal import Decimal
 from functools import wraps
 from urllib.parse import urlencode
 
@@ -10,6 +10,7 @@ from django.contrib.auth import logout
 from django.core.exceptions import PermissionDenied
 from django.db import transaction
 from django.db.models import ProtectedError
+from django.http import Http404
 from django.shortcuts import get_object_or_404, render, redirect
 from django.urls import reverse
 
@@ -30,15 +31,20 @@ from .models import (
     BASE_CURRENCY_CODE,
     BASE_CURRENCY_SYMBOL,
     Currency,
+    PURCHASE_TIMEOUT,
     PaymentMethod,
+    PurchaseOrder,
     SimulationState,
     Wallet,
     WalletTransaction,
     quantize_pyg,
 )
 from .roles import ROLE_LABELS
+from .services import checkout, pricing
 from .services.charts import build_rate_chart
 from .services.keycloak_admin import KeycloakAdminClient, KeycloakAdminError
+from .services.qr import mock_qr_path
+from .templatetags.money import guarani, units
 from .services.simulation import MAX_DAILY_CHANGE, MIN_DAILY_CHANGE, advance_days
 
 # Montos fijos de los botones de prueba de un clic, expresados en guaraníes.
@@ -48,8 +54,6 @@ TEST_WITHDRAW_AMOUNT = Decimal("1.000000")
 # Atajos de monto en la carga de saldo: rellenan el campo con un clic en lugar de
 # obligar a teclear seis dígitos, que es la acción más repetida de la billetera.
 DEPOSIT_PRESETS = [Decimal("100000"), Decimal("500000"), Decimal("1000000"), Decimal("5000000")]
-
-CURRENCY_QUANTUM = Decimal("0.000001")
 
 
 def role_required(*required):
@@ -78,6 +82,7 @@ def _nav_context(request):
         "can_manage_currencies": role_lib.is_manager(request.user),
         "can_simulate": role_lib.is_admin(request.user),
         "can_trade": role_lib.is_trader(request.user),
+        "can_operate_cash": role_lib.is_cashier(request.user),
         "base_currency_code": BASE_CURRENCY_CODE,
         "base_currency_symbol": BASE_CURRENCY_SYMBOL,
     }
@@ -286,7 +291,8 @@ def trade(request):
     """Compra y venta de divisas contra guaraníes.
 
     * **Comprar** usa el precio de *venta* de la divisa (la casa de cambio vende
-      más caro) y puede pagarse con el saldo en guaraníes o con una tarjeta.
+      más caro). El formulario sólo abre la orden: el pago se elige y confirma
+      en la pantalla de pago (``purchase_checkout``), con la cotización congelada.
     * **Vender** usa el precio de *compra* (la casa de cambio compra más barato)
       y acredita guaraníes en el saldo de la billetera.
     """
@@ -311,8 +317,23 @@ def trade(request):
     )
 
     if action == "buy" and buy_form.is_valid():
-        if _process_buy(request, wallet, buy_form):
-            return redirect("trade")
+        data = buy_form.cleaned_data
+        pay_currency = data["pay_currency"]
+        try:
+            order = checkout.create_order(
+                wallet, data["currency"], data["amount"], pay_currency=pay_currency, anchor=data["anchor"]
+            )
+        except checkout.CheckoutError as exc:
+            messages.error(request, str(exc))
+        else:
+            # La pantalla de pago llega con el medio elegido acá ya seleccionado.
+            pay = (
+                checkout.BALANCE_KEY
+                if pay_currency.code == BASE_CURRENCY_CODE
+                else f"{checkout.CURRENCY_KEY_PREFIX}{pay_currency.id}"
+            )
+            url = reverse("purchase_checkout", args=[order.id])
+            return redirect(f"{url}?{urlencode({'pay': pay})}")
     elif action == "sell" and sell_form.is_valid():
         if _process_sell(request, wallet, sell_form):
             return redirect("trade")
@@ -326,78 +347,13 @@ def trade(request):
             "wallet": wallet,
             "holdings": wallet.holdings.select_related("currency").filter(amount__gt=0),
             "currencies": currencies,
-            "rate_table": _rate_table(currencies),
-            "wallet_balance_json": str(wallet.pyg_balance),
+            # Con el guaraní incluido: también se puede elegir del lado que se paga.
+            "rate_table": pricing.rate_table(Currency.objects.filter(is_active=True), foreign_decimals=6),
+            "pending_order": checkout.pending_order(wallet),
+            "timeout_minutes": int(PURCHASE_TIMEOUT.total_seconds() // 60),
         }
     )
     return render(request, "core/trade.html", context)
-
-
-def _rate_table(currencies) -> dict:
-    """Cotizaciones en un diccionario simple, para la vista previa de conversión.
-
-    La plantilla lo publica con ``json_script`` y el navegador recalcula con él
-    cuánto recibirá el usuario antes de confirmar la compra, sin pedir nada al
-    servidor. Los decimales viajan como texto para no perder precisión.
-    """
-    return {
-        str(currency.id): {
-            "code": currency.code,
-            "name": currency.name,
-            "buy_rate": str(currency.buy_rate),
-            "sell_rate": str(currency.sell_rate),
-        }
-        for currency in currencies
-    }
-
-
-def _process_buy(request, wallet, form) -> bool:
-    """Ejecuta una compra de divisa. Devuelve ``True`` si se concretó."""
-    currency = form.cleaned_data["currency"]
-    pyg_amount = quantize_pyg(form.cleaned_data["pyg_amount"])
-    card = form.cleaned_data["payment_source"]  # ``None`` significa "pagar con el saldo".
-
-    if card is None and pyg_amount > wallet.pyg_balance:
-        messages.error(request, "No tienes saldo suficiente en guaraníes para esta compra.")
-        return False
-
-    # Se compra al precio de venta de la divisa: es lo que cobra la casa de cambio.
-    rate = currency.sell_rate
-    currency_amount = (pyg_amount / rate).quantize(CURRENCY_QUANTUM, rounding=ROUND_DOWN)
-    if currency_amount <= 0:
-        messages.error(
-            request,
-            f"El monto es demasiado bajo: 1 {currency.code} cuesta Gs. {rate:,.0f}.".replace(",", "."),
-        )
-        return False
-
-    with transaction.atomic():
-        if card is None:
-            wallet.pyg_balance -= pyg_amount
-            wallet.save(update_fields=["pyg_balance", "updated_at"])
-            note = "Compra con saldo en guaraníes"
-        else:
-            note = f"Compra con {card.masked_number}"
-        holding, _ = wallet.holdings.get_or_create(currency=currency)
-        holding.amount += currency_amount
-        holding.save(update_fields=["amount"])
-        WalletTransaction.objects.create(
-            wallet=wallet,
-            kind=WalletTransaction.BUY,
-            currency=currency,
-            payment_method=card,
-            amount=currency_amount,
-            pyg_amount=pyg_amount,
-            rate_used=rate,
-            note=note,
-        )
-
-    messages.success(
-        request,
-        f"Compraste {currency_amount} {currency.code} por Gs. {pyg_amount:,.0f} "
-        f"(precio de venta Gs. {rate:,.0f}).".replace(",", "."),
-    )
-    return True
 
 
 def _process_sell(request, wallet, form) -> bool:
@@ -435,6 +391,99 @@ def _process_sell(request, wallet, form) -> bool:
         f"(precio de compra Gs. {rate:,.0f}).".replace(",", "."),
     )
     return True
+
+
+# --- Pantalla de pago de una compra --------------------------------------
+
+
+def _own_order(request, order_id) -> tuple[Wallet, PurchaseOrder]:
+    """La orden ``order_id`` de la billetera del usuario, o 404 si es de otro."""
+    wallet = _get_wallet(request.user)
+    order = get_object_or_404(PurchaseOrder.objects.select_related("currency"), pk=order_id, wallet=wallet)
+    return wallet, order
+
+
+@role_required(role_lib.USER)
+def purchase_checkout(request, order_id):
+    """Pantalla de pago: resumen con el precio congelado, medios de pago y plazo.
+
+    Si la orden ya está cerrada (pagada, cancelada o vencida) muestra el estado
+    final en lugar de los medios de pago.
+    """
+    wallet, order = _own_order(request, order_id)
+    if checkout.expire_due_orders(wallet):
+        order.refresh_from_db()
+
+    context = _nav_context(request)
+    context.update({"order": order, "wallet": wallet})
+    if order.is_pending:
+        options = checkout.payment_options(order, wallet)
+        # ``?pay=`` conserva la elección del usuario si una confirmación falló.
+        available = [opt.key for opt in options if opt.available]
+        selected = request.GET.get("pay")
+        if selected not in available:
+            selected = available[0] if available else ""
+        seconds_left = order.seconds_left()
+        timeout_seconds = int(PURCHASE_TIMEOUT.total_seconds())
+        context.update(
+            {
+                "options": options,
+                "selected_key": selected,
+                "has_cards": any(opt.kind == PurchaseOrder.PAY_CARD for opt in options),
+                "seconds_left": seconds_left,
+                "timeout_seconds": timeout_seconds,
+                # Entero a propósito: un decimal saldría con coma en español y
+                # rompería el CSS del ancho de la barra.
+                "timer_percent": 100 * seconds_left // timeout_seconds,
+                "current_rate": order.currency.sell_rate,
+                "rate_changed": order.currency.sell_rate != order.rate,
+                "qr": mock_qr_path(order.qr_reference),
+            }
+        )
+    return render(request, "core/checkout.html", context)
+
+
+@role_required(role_lib.USER)
+def purchase_confirm(request, order_id):
+    """Cobra la orden con el medio de pago elegido."""
+    if request.method != "POST":
+        return redirect("purchase_checkout", order_id=order_id)
+    wallet, order = _own_order(request, order_id)
+    source_key = request.POST.get("payment_source", "")
+    try:
+        order = checkout.confirm_order(order.id, wallet, source_key)
+    except PurchaseOrder.DoesNotExist:
+        raise Http404
+    except checkout.CheckoutError as exc:
+        messages.error(request, str(exc))
+        url = reverse("purchase_checkout", args=[order_id])
+        return redirect(f"{url}?{urlencode({'pay': source_key})}" if source_key else url)
+
+    messages.success(
+        request,
+        f"Compraste {units(order.currency_amount)} {order.currency.code} por Gs. {guarani(order.pyg_amount)} "
+        f"(precio de venta congelado Gs. {guarani(order.rate)}).",
+    )
+    return redirect("trade")
+
+
+@role_required(role_lib.USER)
+def purchase_cancel(request, order_id):
+    """Cancela la orden sin mover ningún saldo."""
+    if request.method != "POST":
+        return redirect("purchase_checkout", order_id=order_id)
+    wallet, order = _own_order(request, order_id)
+    try:
+        order = checkout.cancel_order(order.id, wallet)
+    except checkout.CheckoutError as exc:
+        messages.error(request, str(exc))
+        return redirect("purchase_checkout", order_id=order_id)
+
+    if order.status == PurchaseOrder.EXPIRED:
+        messages.warning(request, f"La compra #{order.id} ya había vencido; no se cobró nada.")
+    else:
+        messages.success(request, f"Cancelaste la compra #{order.id}. No se cobró nada.")
+    return redirect("trade")
 
 
 # --- Historial de cotizaciones ------------------------------------------
@@ -561,7 +610,7 @@ def currency_delete(request, currency_id):
         except ProtectedError:
             messages.error(
                 request,
-                f"No se puede eliminar {currency.code}: hay billeteras con saldo o movimientos en esa divisa.",
+                f"No se puede eliminar {currency.code}: hay billeteras con saldo, movimientos u órdenes de compra en esa divisa.",
             )
         else:
             messages.success(request, f"Divisa {currency.code} eliminada.")

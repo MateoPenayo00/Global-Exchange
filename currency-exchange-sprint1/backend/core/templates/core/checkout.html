@@ -1,0 +1,174 @@
+{% extends 'core/base.html' %}
+{% load money static %}
+{% block title %}Exchange Pro | Pago de la compra #{{ order.id }}{% endblock %}
+{% block topbar_title %}Pago de la compra #{{ order.id }}{% endblock %}
+{% block topbar_actions %}
+  <span class="balance-chip">Saldo <strong>Gs. {{ wallet.pyg_balance|gs }}</strong></span>
+  <a class="btn btn-secondary btn-sm" href="{% url 'wallet' %}">Mi billetera</a>
+{% endblock %}
+{% block content %}
+  {% if order.is_pending %}
+    <div class="stack-lg" id="checkout" data-countdown data-seconds-left="{{ seconds_left }}" data-timeout="{{ timeout_seconds }}">
+
+      {# ---- Resumen con el precio congelado y el plazo para pagar ---- #}
+      <section class="card card-raised">
+        <div class="card-head row-between">
+          <h2 class="hexed">Confirmá tu compra</h2>
+          <div class="timer" id="timer">
+            <span class="timer-label">Tiempo para pagar</span>
+            <span class="timer-value" id="timer-value" role="timer">{{ seconds_left|countdown }}</span>
+            <span class="timer-track" aria-hidden="true"><span class="timer-fill" id="timer-fill" style="width: {{ timer_percent }}%"></span></span>
+          </div>
+        </div>
+
+        <div class="preview-flow">
+          <div class="preview-side">
+            <span class="preview-label">Pagás</span>
+            <span class="preview-value">{{ order.pyg_amount|gs }}</span>
+            <span class="preview-unit">guaraníes</span>
+          </div>
+          <div class="preview-arrow" aria-hidden="true"></div>
+          <div class="preview-side preview-side-get">
+            <span class="preview-label">Recibís</span>
+            <span class="preview-value">{{ order.currency_amount|units }}</span>
+            <span class="preview-unit">{{ order.currency.code }} · {{ order.currency.name }}</span>
+          </div>
+        </div>
+
+        <p class="preview-rate">
+          Precio congelado: <strong>1 {{ order.currency.code }} = Gs. {{ order.rate|rate }}</strong>,
+          fijado al abrir esta compra. Si la pizarra cambia mientras pagás,
+          tu compra mantiene este precio.
+        </p>
+        {% if rate_changed %}
+          <p class="notice" style="margin-top:12px" id="rate-changed">
+            <span>
+              La pizarra ya marca <strong>Gs. {{ current_rate|rate }}</strong> por 1 {{ order.currency.code }}.
+              Si confirmás antes de que venza el plazo, pagás el precio congelado de Gs. {{ order.rate|rate }}.
+            </span>
+          </p>
+        {% endif %}
+      </section>
+
+      {# ---- Medios de pago ---- #}
+      <section class="card">
+        <form method="post" action="{% url 'purchase_confirm' order.id %}" id="pay-form" data-payment-form>
+          {% csrf_token %}
+          <fieldset class="pay-options">
+            <legend class="hexed">Elegí cómo pagar</legend>
+            {% for option in options %}
+              <label class="pay-option{% if not option.available %} is-disabled{% endif %}">
+                <input type="radio" name="payment_source" value="{{ option.key }}" data-kind="{{ option.kind }}"
+                       {% if option.key == selected_key and option.available %}checked{% endif %}
+                       {% if not option.available %}disabled{% endif %}>
+                {% if option.kind == 'currency' %}
+                  <span class="coin" aria-hidden="true">{{ option.currency.code }}</span>
+                {% elif option.kind == 'balance' %}
+                  <span class="coin coin-base" aria-hidden="true">Gs.</span>
+                {% elif option.kind == 'card' %}
+                  <span class="coin coin-card" aria-hidden="true">{{ option.card.last4 }}</span>
+                {% else %}
+                  <span class="coin coin-card" aria-hidden="true">QR</span>
+                {% endif %}
+                <span class="pay-option-body">
+                  <span class="pay-option-title">{{ option.title }}</span>
+                  <span class="pay-option-detail">{{ option.detail }}</span>
+                  {% if not option.available %}<span class="pay-option-reason">{{ option.reason }}</span>{% endif %}
+                </span>
+                <span class="pay-option-amount">
+                  {% if option.kind == 'currency' %}
+                    {{ option.amount|units }} {{ option.currency.code }}
+                  {% else %}
+                    Gs. {{ option.amount|gs }}
+                  {% endif %}
+                </span>
+              </label>
+            {% endfor %}
+          </fieldset>
+
+          {% if not has_cards %}
+            <p class="muted small" style="margin-top:12px">
+              ¿Querés pagar con tarjeta? <a href="{% url 'wallet' %}">Agregá una en tu billetera</a>
+              y volvé a esta pestaña antes de que venza el plazo.
+            </p>
+          {% endif %}
+
+          {# Sin JavaScript el panel queda siempre visible; con él, sólo al elegir QR. #}
+          <div class="qr-panel" id="qr-panel" data-show-for="qr">
+            <svg class="qr-code" viewBox="-2 -2 {{ qr.size|add:4 }} {{ qr.size|add:4 }}" role="img"
+                 aria-label="Código QR de pago simulado, referencia {{ order.qr_reference }}"
+                 shape-rendering="crispEdges">
+              <rect x="-2" y="-2" width="{{ qr.size|add:4 }}" height="{{ qr.size|add:4 }}" fill="#ffffff"></rect>
+              <path d="{{ qr.path }}" fill="#1f1033"></path>
+            </svg>
+            <div class="qr-info">
+              <h3>Pagá con QR</h3>
+              <p>Escaneá el código con la app de tu banco y, cuando el banco te confirme el pago,
+                 pulsá <strong>Confirmar pago</strong>.</p>
+              <dl class="qr-facts">
+                <dt>Referencia</dt><dd><code id="qr-reference">{{ order.qr_reference }}</code></dd>
+                <dt>Monto</dt><dd>Gs. {{ order.pyg_amount|gs }}</dd>
+              </dl>
+              <p class="muted small">Código simulado: todavía no hay una pasarela de pagos real, así que no
+                 se cobra nada fuera de la aplicación.</p>
+            </div>
+          </div>
+
+          <p class="preview-warning danger" id="timer-expired" hidden>
+            Se venció el plazo de pago. La compra se canceló y no se cobró nada.
+          </p>
+
+          <div class="btn-group checkout-actions">
+            <button class="btn btn-primary" type="submit" id="confirm-button">Confirmar pago</button>
+            <button class="btn btn-danger" type="submit" formaction="{% url 'purchase_cancel' order.id %}"
+                    formnovalidate id="cancel-button">Cancelar compra</button>
+          </div>
+        </form>
+      </section>
+    </div>
+
+    <script src="{% static 'js/payment-tab.js' %}"></script>
+
+  {% else %}
+    {# ---- La orden ya está cerrada: se muestra cómo terminó ---- #}
+    <section class="card card-raised checkout-closed">
+      <div class="card-head row-between">
+        <h2 class="hexed">Compra #{{ order.id }}</h2>
+        {% if order.status == 'completed' %}
+          <span class="tag tag-up">Pagada</span>
+        {% elif order.status == 'expired' %}
+          <span class="tag tag-pink">Vencida</span>
+        {% else %}
+          <span class="tag tag-down">Cancelada</span>
+        {% endif %}
+      </div>
+
+      <p>
+        {{ order.currency_amount|units }} {{ order.currency.code }} por Gs. {{ order.pyg_amount|gs }},
+        a Gs. {{ order.rate|rate }} por unidad.
+      </p>
+
+      {% if order.status == 'completed' %}
+        <p class="muted">
+          {% if order.payment_kind == 'balance' %}Pagada con tu saldo en guaraníes.
+          {% elif order.payment_kind == 'currency' %}Pagada con {{ order.paid_amount|units }} {{ order.paid_currency.code }} de tu billetera, convertidos a guaraníes al precio congelado.
+          {% elif order.payment_kind == 'card' %}Pagada con tarjeta{% if order.payment_method %} {{ order.payment_method.masked_number }}{% endif %}.
+          {% else %}Pagada con código QR (referencia {{ order.qr_reference }}).{% endif %}
+          Fecha: {{ order.closed_at|date:"d/m/Y H:i" }}.
+        </p>
+      {% elif order.status == 'expired' %}
+        <p class="muted">
+          Pasó el plazo para confirmar el pago y la compra se canceló sola. No se cobró nada.
+          Si todavía querés comprar, iniciá una nueva compra con el precio actual.
+        </p>
+      {% else %}
+        <p class="muted">Cancelaste esta compra. No se cobró nada.</p>
+      {% endif %}
+
+      <div class="btn-group">
+        <a class="btn btn-primary" href="{% url 'trade' %}?currency={{ order.currency.id }}#comprar">Nueva compra</a>
+        <a class="btn btn-secondary" href="{% url 'wallet' %}">Ver billetera</a>
+      </div>
+    </section>
+  {% endif %}
+{% endblock %}

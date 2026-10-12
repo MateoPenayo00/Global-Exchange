@@ -1,0 +1,81 @@
+{% load money %}
+{# Cuerpo del reporte de una sesión: lo usan la vista previa del cierre y el reporte final. #}
+<section class="card">
+  <div class="card-head">
+    <h2 class="hexed">Estado inicial y final de la caja</h2>
+    <p class="muted small" style="margin-top:8px">
+      Sólo el efectivo mueve la caja. Lo cobrado con tarjeta o QR figura aparte, para conciliarlo
+      con el POS y con el banco.
+    </p>
+  </div>
+  <div class="scroll-x">
+    <table>
+      <thead>
+        <tr>
+          <th>Divisa</th>
+          <th class="num">Apertura</th>
+          <th class="num">Entró en efectivo</th>
+          <th class="num">Salió en efectivo</th>
+          <th class="num">{% if report.session.is_open %}Ahora{% else %}Cierre{% endif %}</th>
+          <th class="num">Diferencia</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in report.currencies %}
+          <tr>
+            <td><strong>{{ row.currency.code }}</strong> <span class="muted small">{{ row.currency.name }}</span></td>
+            <td class="num">{{ row.opening|cash:row.currency }}</td>
+            <td class="num">{% if row.cash_in %}+{{ row.cash_in|cash:row.currency }}{% else %}<span class="muted">—</span>{% endif %}</td>
+            <td class="num">{% if row.cash_out %}−{{ row.cash_out|cash:row.currency }}{% else %}<span class="muted">—</span>{% endif %}</td>
+            <td class="num">
+              <strong>{{ row.closing|cash:row.currency }}</strong>
+              {% if row.closing != row.expected %}
+                <span class="tag tag-down" title="Apertura + entradas − salidas = {{ row.expected|cash:row.currency }}">No cuadra</span>
+              {% endif %}
+            </td>
+            <td class="num">
+              {% if row.net > 0 %}<span class="delta delta-up">▲ +{{ row.net|cash:row.currency }}</span>
+              {% elif row.net < 0 %}<span class="delta delta-down">▼ {{ row.net|cash:row.currency }}</span>
+              {% else %}<span class="muted">—</span>{% endif %}
+            </td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  {% if report.has_non_cash %}
+    <h3 style="margin-top:20px">Cobros que no entran a la caja</h3>
+    <div class="scroll-x">
+      <table>
+        <thead><tr><th>Divisa</th><th class="num">Tarjeta</th><th class="num">QR</th></tr></thead>
+        <tbody>
+          {% for row in report.currencies %}
+            {% if row.card_in or row.qr_in %}
+              <tr>
+                <td><strong>{{ row.currency.code }}</strong></td>
+                <td class="num">{{ row.card_in|cash:row.currency }}</td>
+                <td class="num">{{ row.qr_in|cash:row.currency }}</td>
+              </tr>
+            {% endif %}
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  {% endif %}
+</section>
+
+<section class="card">
+  <div class="card-head row-between">
+    <h2 class="hexed">Operaciones ({{ report.transactions|length }})</h2>
+    <span class="muted small">
+      Valor total: Gs. {{ report.total_pyg_value|gs }}
+      {% if report.discarded %} · {{ report.discarded }} cotización{{ report.discarded|pluralize:"es" }} sin confirmar{% endif %}
+    </span>
+  </div>
+  {% if report.transactions %}
+    {% include 'core/_cash_transactions_table.html' with transactions=report.transactions printable=printable %}
+  {% else %}
+    <p class="muted">No hubo operaciones en esta sesión.</p>
+  {% endif %}
+</section>

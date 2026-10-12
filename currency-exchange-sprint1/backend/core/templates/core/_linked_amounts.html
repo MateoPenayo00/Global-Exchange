@@ -1,0 +1,22 @@
+{# Dos montos vinculados con su selector de divisa (ver static/js/linked-amounts.js). #}
+{# Recibe: form (con LinkedAmountsMixin), rates_id y, opcional, value_step. #}
+{% with f=form.linked_fields %}
+  <div class="linked-amounts" data-linked-amounts data-rates="{{ rates_id }}"{% if value_step %} data-value-step="1"{% endif %}>
+    <div class="amount-pair">
+      <label for="{{ f.amount_in.id_for_label }}">{{ f.amount_in.label }}</label>
+      <div class="amount-pair-inputs">{{ f.amount_in }}{{ f.currency_in }}</div>
+      {{ f.amount_in.errors }}{{ f.currency_in.errors }}
+    </div>
+    <span class="linked-arrow" aria-hidden="true">→</span>
+    <div class="amount-pair">
+      <label for="{{ f.amount_out.id_for_label }}">{{ f.amount_out.label }}</label>
+      <div class="amount-pair-inputs">{{ f.amount_out }}{{ f.currency_out }}</div>
+      {{ f.amount_out.errors }}{{ f.currency_out.errors }}
+    </div>
+    {{ f.anchor }}
+  </div>
+  <p class="muted small linked-hint">Escribí uno de los dos montos: el otro se completa solo.</p>
+  {% if form.non_field_errors %}
+    <ul class="errorlist">{% for error in form.non_field_errors %}<li>{{ error }}</li>{% endfor %}</ul>
+  {% endif %}
+{% endwith %}

@@ -1,6 +1,6 @@
 from django.contrib import admin
 from django.urls import include, path
-from core import views
+from core import cashier_views, views
 
 urlpatterns = [
     path("django-admin/", admin.site.urls),
@@ -8,6 +8,9 @@ urlpatterns = [
     path("dashboard/", views.dashboard, name="dashboard"),
     path("account/", views.account, name="account"),
     path("trade/", views.trade, name="trade"),
+    path("trade/checkout/<int:order_id>/", views.purchase_checkout, name="purchase_checkout"),
+    path("trade/checkout/<int:order_id>/confirm/", views.purchase_confirm, name="purchase_confirm"),
+    path("trade/checkout/<int:order_id>/cancel/", views.purchase_cancel, name="purchase_cancel"),
     path("wallet/", views.wallet_view, name="wallet"),
     path("wallet/deposit/", views.wallet_deposit, name="wallet_deposit"),
     path("wallet/deposit/test/", views.wallet_deposit_test, name="wallet_deposit_test"),
@@ -15,6 +18,15 @@ urlpatterns = [
     path("wallet/withdraw/<int:currency_id>/test/", views.wallet_withdraw_test, name="wallet_withdraw_test"),
     path("wallet/payment-methods/new/", views.payment_method_create, name="payment_method_create"),
     path("wallet/payment-methods/<int:method_id>/delete/", views.payment_method_delete, name="payment_method_delete"),
+    path("caja/", cashier_views.cash_desk, name="cash_desk"),
+    path("caja/abrir/", cashier_views.cash_session_open, name="cash_session_open"),
+    path("caja/cerrar/", cashier_views.cash_session_close, name="cash_session_close"),
+    path("caja/operaciones/nueva/", cashier_views.cash_quote, name="cash_quote"),
+    path("caja/operaciones/<int:tx_id>/", cashier_views.cash_operation, name="cash_operation"),
+    path("caja/operaciones/<int:tx_id>/confirmar/", cashier_views.cash_operation_confirm, name="cash_operation_confirm"),
+    path("caja/operaciones/<int:tx_id>/cancelar/", cashier_views.cash_operation_cancel, name="cash_operation_cancel"),
+    path("caja/sesiones/<int:session_id>/", cashier_views.cash_session_report, name="cash_session_report"),
+    path("caja/sesiones/<int:session_id>/csv/", cashier_views.cash_session_report_csv, name="cash_session_report_csv"),
     path("history/", views.currency_history, name="currency_history"),
     path("currencies/", views.currency_management, name="currency_management"),
     path("currencies/new/", views.currency_create, name="currency_create"),
