@@ -1,9 +1,13 @@
 from django.contrib import admin
 
 from .models import (
+    CashSession,
+    CashSessionBalance,
+    CashTransaction,
     Currency,
     CurrencyRate,
     PaymentMethod,
+    PurchaseOrder,
     SimulationState,
     Wallet,
     WalletHolding,
@@ -60,3 +64,36 @@ class WalletTransactionAdmin(admin.ModelAdmin):
     list_display = ("wallet", "kind", "currency", "amount", "pyg_amount", "payment_method", "created_at")
     list_filter = ("kind", "currency")
     search_fields = ("wallet__user__username",)
+
+
+@admin.register(PurchaseOrder)
+class PurchaseOrderAdmin(admin.ModelAdmin):
+    list_display = ("id", "wallet", "currency", "pyg_amount", "currency_amount", "rate", "status", "payment_kind", "created_at")
+    list_filter = ("status", "payment_kind", "currency")
+    search_fields = ("wallet__user__username", "qr_reference")
+    readonly_fields = ("frozen_rates", "created_at", "expires_at", "closed_at")
+
+
+class CashSessionBalanceInline(admin.TabularInline):
+    model = CashSessionBalance
+    extra = 0
+    readonly_fields = ("currency", "opening_amount", "current_amount", "closing_amount")
+    can_delete = False
+
+
+@admin.register(CashSession)
+class CashSessionAdmin(admin.ModelAdmin):
+    list_display = ("id", "cashier_name", "status", "opened_at", "closed_at")
+    list_filter = ("status",)
+    search_fields = ("cashier_name", "cashier__username")
+    inlines = [CashSessionBalanceInline]
+
+
+@admin.register(CashTransaction)
+class CashTransactionAdmin(admin.ModelAdmin):
+    list_display = (
+        "id", "session", "status", "customer_name", "customer_document",
+        "amount_in", "currency_in", "amount_out", "currency_out", "payment_method", "created_at",
+    )
+    list_filter = ("status", "payment_method", "currency_in", "currency_out")
+    search_fields = ("customer_name", "customer_document", "qr_reference")

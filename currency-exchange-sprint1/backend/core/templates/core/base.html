@@ -45,6 +45,13 @@
               </a>
             {% endif %}
 
+            {% if can_operate_cash %}
+              <p class="nav-group">Ventanilla</p>
+              <a class="nav-item {% if '/caja/' in request.path %}is-active{% endif %}" href="{% url 'cash_desk' %}">
+                <span class="nav-hex" aria-hidden="true"></span>Caja
+              </a>
+            {% endif %}
+
             {% if can_manage_currencies or can_simulate or can_manage_users %}
               <p class="nav-group">Administración</p>
               {% if can_manage_currencies %}

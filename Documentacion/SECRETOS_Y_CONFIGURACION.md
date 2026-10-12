@@ -162,9 +162,10 @@ documentadas en un solo lugar.
 | El sitio | `demo.admin` | `ChangeMe123!` | Cuenta de administrador. |
 | El sitio | `demo.manager` | `ChangeMe123!` | Cuenta de gestor. |
 | El sitio | `demo.customer` | `ChangeMe123!` | Cuenta de usuario. |
+| El sitio | `demo.cajero` | `ChangeMe123!` | Cuenta de cajero (pestaña *Caja*). |
 | Consola de Keycloak | `admin` | `change-me` | Administración de identidad. |
 
-Las tres cuentas del sitio se crean al importar `keycloak/realm-export.json`. Para
+Las cuatro cuentas del sitio se crean al importar `keycloak/realm-export.json`. Para
 cambiarlas: consola de Keycloak → realm `exchange-learning` → *Users* → el usuario →
 *Credentials*. Para que el cambio quede en el repositorio hay que editar también el
 realm export.
@@ -237,7 +238,7 @@ Si el proyecto va a dejar de correr sólo en `localhost`:
 
 - [ ] Los cinco secretos de la sección 3 cambiados por valores aleatorios.
 - [ ] `KEYCLOAK_ADMIN_CLIENT_SECRET` cambiado también.
-- [ ] Las contraseñas de `demo.admin`, `demo.manager`, `demo.customer` y del `admin`
+- [ ] Las contraseñas de `demo.admin`, `demo.manager`, `demo.customer`, `demo.cajero` y del `admin`
       de Keycloak cambiadas.
 - [ ] `DJANGO_DEBUG=0`.
 - [ ] `DJANGO_ALLOWED_HOSTS` y `DJANGO_CSRF_TRUSTED_ORIGINS` con los hosts reales y

@@ -1,0 +1,207 @@
+{% extends 'core/base.html' %}
+{% load money static %}
+{% block title %}Exchange Pro | Operación de caja #{{ tx.id }}{% endblock %}
+{% block topbar_title %}Caja #{{ tx.session.id }} · Operación #{{ tx.id }}{% endblock %}
+{% block topbar_actions %}
+  <a class="btn btn-secondary btn-sm" href="{% url 'cash_desk' %}">Volver a la caja</a>
+{% endblock %}
+{% block content %}
+  {% if tx.is_pending and can_operate %}
+    <div class="stack-lg" data-countdown data-seconds-left="{{ seconds_left }}" data-timeout="{{ timeout_seconds }}">
+
+      {# ---- Cotización congelada ---- #}
+      <section class="card card-raised">
+        <div class="card-head row-between">
+          <h2 class="hexed">{{ tx.description }}</h2>
+          <div class="timer" id="timer">
+            <span class="timer-label">Cotización válida</span>
+            <span class="timer-value" id="timer-value" role="timer">{{ seconds_left|countdown }}</span>
+            <span class="timer-track" aria-hidden="true"><span class="timer-fill" id="timer-fill" style="width: {{ timer_percent }}%"></span></span>
+          </div>
+        </div>
+
+        <div class="preview-flow">
+          <div class="preview-side">
+            <span class="preview-label">El cliente entrega</span>
+            <span class="preview-value">{{ tx.amount_in|cash:tx.currency_in }}</span>
+            <span class="preview-unit">{{ tx.currency_in.name }}</span>
+          </div>
+          <div class="preview-arrow" aria-hidden="true"></div>
+          <div class="preview-side preview-side-get">
+            <span class="preview-label">El cliente recibe</span>
+            <span class="preview-value">{{ tx.amount_out|cash:tx.currency_out }}</span>
+            <span class="preview-unit">{{ tx.currency_out.name }} · siempre en efectivo</span>
+          </div>
+        </div>
+
+        <p class="preview-rate">
+          Cotización congelada:
+          {% if not tx.currency_in.is_base %}<strong>1 {{ tx.currency_in.code }} = Gs. {{ tx.rate_in|units }}</strong> (compra){% endif %}{% if not tx.currency_in.is_base and not tx.currency_out.is_base %} · {% endif %}{% if not tx.currency_out.is_base %}<strong>1 {{ tx.currency_out.code }} = Gs. {{ tx.rate_out|units }}</strong> (venta){% endif %}.
+          Valor de la operación: Gs. {{ tx.pyg_value|gs }}.
+        </p>
+        <p class="preview-rate">
+          En caja hay {{ cash_out_available|cash:tx.currency_out }}; después de entregar quedan
+          <strong>{{ cash_out_available|sub:tx.amount_out|cash:tx.currency_out }}</strong>.
+        </p>
+        {% if rate_changed %}
+          <p class="notice" style="margin-top:12px" id="rate-changed">
+            <span>
+              La pizarra cambió desde que cotizaste. Si confirmás antes de que venza el plazo, se usa la
+              cotización congelada de arriba.
+            </span>
+          </p>
+        {% endif %}
+      </section>
+
+      {# ---- Medio de pago y cliente ---- #}
+      <section class="card">
+        <form method="post" action="{% url 'cash_operation_confirm' tx.id %}" data-payment-form novalidate>
+          {% csrf_token %}
+          <fieldset class="pay-options">
+            <legend class="hexed">¿Cómo paga el cliente los {{ tx.amount_in|cash:tx.currency_in }}?</legend>
+            {% for value, label in payment_form.fields.payment_method.choices %}
+              <label class="pay-option">
+                <input type="radio" name="payment_method" value="{{ value }}" data-kind="{{ value }}"
+                       {% if payment_form.payment_method.value == value %}checked{% endif %}>
+                <span class="coin{% if value == 'cash' %} coin-base{% else %} coin-card{% endif %}" aria-hidden="true">
+                  {% if value == 'cash' %}${% elif value == 'card' %}POS{% else %}QR{% endif %}
+                </span>
+                <span class="pay-option-body">
+                  <span class="pay-option-title">{{ label }}</span>
+                  <span class="pay-option-detail">
+                    {% if value == 'cash' %}
+                      Entran {{ tx.amount_in|cash:tx.currency_in }} y salen {{ tx.amount_out|cash:tx.currency_out }} de la caja.
+                    {% elif value == 'card' %}
+                      Se cobra con el POS. A la caja no entra efectivo; salen {{ tx.amount_out|cash:tx.currency_out }}.
+                    {% else %}
+                      El cliente escanea el código. A la caja no entra efectivo; salen {{ tx.amount_out|cash:tx.currency_out }}.
+                    {% endif %}
+                  </span>
+                </span>
+              </label>
+            {% endfor %}
+            {{ payment_form.payment_method.errors }}
+          </fieldset>
+
+          {# Sin JavaScript los dos paneles quedan visibles; con él, según el medio elegido. #}
+          {# Sin JavaScript queda siempre visible; con él, sólo al elegir tarjeta. #}
+          <div class="card-panel" data-show-for="card">
+            <h3>Datos de la tarjeta</h3>
+            <div class="card-fields">
+              {% for field in payment_form %}
+                {% if field.name in "card_number card_holder card_expiry card_cvv" %}
+                  <div class="field card-field-{{ field.name }}">
+                    <label for="{{ field.id_for_label }}">{{ field.label }}</label>
+                    {{ field }}
+                    {% if field.help_text %}<span class="helptext">{{ field.help_text }}</span>{% endif %}
+                    {{ field.errors }}
+                  </div>
+                {% endif %}
+              {% endfor %}
+            </div>
+            <p class="muted small">
+              Se verifica el número (dígito verificador), el vencimiento y el código. Sólo se guardan la
+              marca, los últimos 4 dígitos y el titular: nunca el número completo ni el código de seguridad.
+            </p>
+          </div>
+
+          <div class="qr-panel" data-show-for="qr">
+            <svg class="qr-code" viewBox="-2 -2 {{ qr.size|add:4 }} {{ qr.size|add:4 }}" role="img"
+                 aria-label="Código QR de cobro simulado, referencia {{ tx.qr_reference }}"
+                 shape-rendering="crispEdges">
+              <rect x="-2" y="-2" width="{{ qr.size|add:4 }}" height="{{ qr.size|add:4 }}" fill="#ffffff"></rect>
+              <path d="{{ qr.path }}" fill="#1f1033"></path>
+            </svg>
+            <div class="qr-info">
+              <h3>Cobro con QR</h3>
+              <p>Mostrale este código al cliente para que lo escanee con la app de su banco. Cuando el
+                 banco confirme el pago, completá sus datos y pulsá <strong>Confirmar operación</strong>.</p>
+              <dl class="qr-facts">
+                <dt>Referencia</dt><dd><code>{{ tx.qr_reference }}</code></dd>
+                <dt>Monto</dt><dd>{{ tx.amount_in|cash:tx.currency_in }}</dd>
+              </dl>
+              <p class="muted small">Código simulado: todavía no hay una pasarela de pagos real.</p>
+            </div>
+          </div>
+
+          <h3 class="hexed" style="margin-top:24px">Datos del cliente</h3>
+          <div class="form-inline">
+            {% for field in payment_form %}
+              {% if field.name == 'customer_name' or field.name == 'customer_document' %}
+                <div class="field">
+                  <label for="{{ field.id_for_label }}">{{ field.label }}</label>
+                  {{ field }}
+                  {{ field.errors }}
+                </div>
+              {% endif %}
+            {% endfor %}
+          </div>
+          {% if payment_form.non_field_errors %}
+            <ul class="errorlist">{% for error in payment_form.non_field_errors %}<li>{{ error }}</li>{% endfor %}</ul>
+          {% endif %}
+
+          <p class="preview-warning danger" id="timer-expired" hidden>
+            Se venció la cotización. La operación se canceló y no se movió efectivo.
+          </p>
+
+          <div class="btn-group checkout-actions">
+            <button class="btn btn-primary" type="submit">Confirmar operación</button>
+            <button class="btn btn-danger" type="submit" formaction="{% url 'cash_operation_cancel' tx.id %}"
+                    formnovalidate>Cancelar operación</button>
+          </div>
+        </form>
+      </section>
+    </div>
+    <script src="{% static 'js/payment-tab.js' %}"></script>
+
+  {% elif tx.is_pending %}
+    <section class="card">
+      <h2 class="hexed">Operación #{{ tx.id }} en curso</h2>
+      <p class="muted">La está atendiendo {{ tx.session.cashier_name }}. Sólo el cajero de la sesión puede completarla.</p>
+    </section>
+
+  {% else %}
+    {# ---- Comprobante (o estado final si no se realizó) ---- #}
+    <section class="card card-raised receipt">
+      <div class="card-head row-between">
+        <h2 class="hexed">{% if tx.status == 'completed' %}Comprobante de operación #{{ tx.id }}{% else %}Operación #{{ tx.id }}{% endif %}</h2>
+        {% if tx.status == 'completed' %}<span class="tag tag-up">Realizada</span>
+        {% elif tx.status == 'expired' %}<span class="tag tag-pink">Vencida</span>
+        {% else %}<span class="tag tag-down">Cancelada</span>{% endif %}
+      </div>
+
+      {% if tx.status == 'completed' %}
+        <dl class="receipt-facts">
+          <dt>Fecha</dt><dd>{{ tx.closed_at|date:"d/m/Y H:i:s" }}</dd>
+          <dt>Caja</dt><dd>#{{ tx.session.id }} · {{ tx.session.cashier_name }}</dd>
+          <dt>Cliente</dt><dd>{{ tx.customer_name }}</dd>
+          <dt>Cédula de identidad</dt><dd>{{ tx.customer_document|ci }}</dd>
+          <dt>Operación</dt><dd>{{ tx.description }}</dd>
+          <dt>El cliente entregó</dt><dd><strong>{{ tx.amount_in|cash:tx.currency_in }}</strong></dd>
+          <dt>El cliente recibió</dt><dd><strong>{{ tx.amount_out|cash:tx.currency_out }}</strong> en efectivo</dd>
+          {% if not tx.currency_in.is_base %}<dt>Cotización {{ tx.currency_in.code }}</dt><dd>Gs. {{ tx.rate_in|units }} (compra)</dd>{% endif %}
+          {% if not tx.currency_out.is_base %}<dt>Cotización {{ tx.currency_out.code }}</dt><dd>Gs. {{ tx.rate_out|units }} (venta)</dd>{% endif %}
+          <dt>Medio de pago</dt>
+          <dd>
+            {{ tx.get_payment_method_display }}
+            {% if tx.payment_method == 'card' %}{{ tx.get_card_brand_display }} •••• {{ tx.card_last4 }} · titular {{ tx.card_holder }}{% elif tx.payment_method == 'qr' %}(referencia {{ tx.qr_reference }}){% endif %}
+          </dd>
+          <dt>Valor de la operación</dt><dd>Gs. {{ tx.pyg_value|gs }}</dd>
+        </dl>
+      {% elif tx.status == 'expired' %}
+        <p class="muted">Pasó el plazo de la cotización sin confirmarla. No se movió efectivo.</p>
+      {% else %}
+        <p class="muted">La operación se canceló. No se movió efectivo.</p>
+      {% endif %}
+
+      <div class="btn-group no-print" style="margin-top:20px">
+        {% if tx.status == 'completed' %}<button class="btn btn-secondary" type="button" onclick="window.print()">Imprimir comprobante</button>{% endif %}
+        {% if tx.session.is_open and can_operate %}
+          <a class="btn btn-primary" href="{% url 'cash_desk' %}#operar">Nueva operación</a>
+        {% else %}
+          <a class="btn btn-primary" href="{% url 'cash_session_report' tx.session.id %}">Ver reporte de la sesión</a>
+        {% endif %}
+      </div>
+    </section>
+  {% endif %}
+{% endblock %}

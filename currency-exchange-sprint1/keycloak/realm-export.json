@@ -88,6 +88,10 @@
         "description": "Compra y vende divisas."
       },
       {
+        "name": "cajero",
+        "description": "Opera la caja física: abre sesiones y atiende clientes en ventanilla."
+      },
+      {
         "name": "customer",
         "description": "Rol heredado, equivalente a user."
       }
@@ -129,6 +133,18 @@
         {"type": "password", "value": "ChangeMe123!", "temporary": false}
       ],
       "realmRoles": ["user"]
+    },
+    {
+      "username": "demo.cajero",
+      "enabled": true,
+      "emailVerified": true,
+      "firstName": "Demo",
+      "lastName": "Cajero",
+      "email": "demo.cajero@example.com",
+      "credentials": [
+        {"type": "password", "value": "ChangeMe123!", "temporary": false}
+      ],
+      "realmRoles": ["cajero"]
     },
     {
       "username": "service-account-exchange-admin-api",

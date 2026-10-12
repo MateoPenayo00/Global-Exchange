@@ -1,0 +1,36 @@
+{% extends 'core/base.html' %}
+{% load money %}
+{% block title %}Exchange Pro | Cerrar caja #{{ report.session.id }}{% endblock %}
+{% block topbar_title %}Cerrar caja #{{ report.session.id }}{% endblock %}
+{% block topbar_actions %}
+  <a class="btn btn-secondary btn-sm" href="{% url 'cash_desk' %}">Volver a la caja</a>
+{% endblock %}
+{% block content %}
+  <div class="stack-lg">
+    <section class="card card-raised">
+      <div class="card-head">
+        <h2 class="hexed">¿Cerrar la caja?</h2>
+        <p class="muted" style="margin-top:8px">
+          Revisá el resumen. Al cerrar se guarda el efectivo final de cada divisa y se genera el
+          reporte de la sesión. Una caja cerrada no admite más operaciones.
+        </p>
+      </div>
+      {% if pending_tx %}
+        <p class="notice" id="close-pending-warning">
+          <span>
+            La operación #{{ pending_tx.id }} está cotizada pero sin confirmar.
+            <strong>Si cerrás ahora se cancela</strong> y no mueve efectivo.
+            <a href="{% url 'cash_operation' pending_tx.id %}">Ir a la operación</a>
+          </span>
+        </p>
+      {% endif %}
+      <form method="post" action="{% url 'cash_session_close' %}" class="btn-group" style="margin-top:16px">
+        {% csrf_token %}
+        <button class="btn btn-danger" type="submit">Cerrar caja y generar reporte</button>
+        <a class="btn btn-secondary" href="{% url 'cash_desk' %}">Seguir operando</a>
+      </form>
+    </section>
+
+    {% include 'core/_cash_report_body.html' with printable=True %}
+  </div>
+{% endblock %}

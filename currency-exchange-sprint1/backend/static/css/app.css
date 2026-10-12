@@ -9,7 +9,10 @@
      1. Tipografías      5. Barra lateral y navegación   9. Tablas
      2. Tokens           6. Barra superior              10. Insignias y chips
      3. Base             7. Tarjetas y hexágonos        11. Vista previa y gráficos
-     4. Estructura       8. Botones y formularios       12. Adaptación a móvil
+     4. Estructura       8. Botones y formularios       12. Pantalla de pago
+                                                        13. Caja física
+                                                        14. Adaptación a móvil
+                                                        15. Impresión
    ========================================================================== */
 
 /* 1. Tipografías ---------------------------------------------------------- */
@@ -564,7 +567,103 @@ tbody tr:hover { background: var(--purple-50); }
 }
 .notice strong { color: var(--pink-600); }
 
-/* 12. Adaptación a móvil -------------------------------------------------- */
+/* 12. Pantalla de pago ---------------------------------------------------- */
+
+/* Cuenta regresiva del plazo para pagar. Se vuelve rosa en el último minuto. */
+.timer { display: grid; gap: 4px; min-width: 160px; justify-items: end; }
+.timer-label { font-size: var(--text-xs); letter-spacing: .07em; text-transform: uppercase; color: var(--ink-500); }
+.timer-value {
+  font-family: var(--font-display); font-size: var(--text-2xl); line-height: 1;
+  color: var(--purple-700); font-variant-numeric: tabular-nums;
+}
+.timer-track { width: 100%; height: 6px; border-radius: 999px; background: var(--surface-sunken); overflow: hidden; }
+.timer-fill { display: block; height: 100%; background: var(--purple-600); transition: width .5s linear; }
+.timer.is-urgent .timer-value { color: var(--down); }
+.timer.is-urgent .timer-fill { background: var(--pink-500); }
+
+/* Medios de pago: cada opción es una fila entera clicable. */
+.pay-options { border: 0; padding: 0; margin: 0; display: grid; gap: var(--space-2); min-width: 0; }
+.pay-options > legend {
+  font-family: var(--font-display); font-size: var(--text-lg); font-weight: 700;
+  padding: 0; margin-bottom: var(--space-3);
+}
+.pay-option {
+  display: grid; grid-template-columns: auto auto 1fr auto; align-items: center; gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--border); border-radius: var(--radius);
+  background: var(--surface); cursor: pointer;
+  transition: border-color .12s ease, background-color .12s ease;
+}
+.pay-option:hover { border-color: var(--purple-400); background: var(--purple-50); }
+.pay-option:has(input:checked) { border-color: var(--purple-600); background: var(--purple-50); box-shadow: inset 3px 0 0 var(--purple-600); }
+.pay-option:has(input:focus-visible) { outline: 2px solid var(--purple-500); outline-offset: 2px; }
+.pay-option input[type="radio"] { width: 18px; height: 18px; margin: 0; accent-color: var(--purple-600); cursor: pointer; }
+.pay-option.is-disabled { cursor: not-allowed; background: var(--surface-page); }
+.pay-option.is-disabled:hover { border-color: var(--border); }
+.pay-option.is-disabled .coin, .pay-option.is-disabled .pay-option-title, .pay-option.is-disabled .pay-option-amount { opacity: .55; }
+.pay-option-body { display: grid; gap: 2px; min-width: 0; }
+.pay-option-title { font-weight: 600; }
+.pay-option-detail { font-size: var(--text-sm); color: var(--ink-500); }
+.pay-option-reason { font-size: var(--text-sm); font-weight: 600; color: var(--down); }
+.pay-option-amount { font-weight: 700; font-variant-numeric: tabular-nums; white-space: nowrap; text-align: right; }
+.coin-card { background: linear-gradient(155deg, var(--ink-700), var(--ink-900)); }
+
+/* Panel del QR simulado. */
+.qr-panel {
+  display: flex; gap: var(--space-5); align-items: flex-start; flex-wrap: wrap;
+  margin-top: var(--space-4); padding: var(--space-4);
+  border: 1px dashed var(--border-strong); border-radius: var(--radius); background: var(--purple-50);
+}
+.qr-panel[hidden] { display: none; }
+.qr-code { width: 184px; height: 184px; flex: none; border-radius: var(--radius-sm); border: 1px solid var(--border); }
+.qr-info { flex: 1 1 240px; }
+.qr-facts { display: grid; grid-template-columns: auto 1fr; gap: var(--space-1) var(--space-3); margin: 0 0 var(--space-3); font-size: var(--text-sm); }
+.qr-facts dt { color: var(--ink-500); }
+.qr-facts dd { margin: 0; font-weight: 600; }
+.qr-facts code { font-size: var(--text-sm); letter-spacing: .04em; }
+
+.checkout-actions { margin-top: var(--space-5); }
+
+/* Montos vinculados (compra en línea y caja): monto + divisa, a cada lado. */
+.linked-amounts { display: flex; gap: var(--space-3); align-items: flex-end; flex-wrap: wrap; }
+.amount-pair { display: grid; gap: var(--space-2); flex: 1 1 260px; min-width: 0; }
+.amount-pair > label { font-size: var(--text-sm); font-weight: 600; color: var(--ink-700); }
+.amount-pair-inputs { display: flex; }
+.amount-pair-inputs input { flex: 1 1 auto; min-width: 0; border-top-right-radius: 0; border-bottom-right-radius: 0; }
+.amount-pair-inputs select {
+  flex: 0 0 auto; width: auto; max-width: 45%;
+  border-left: 0; border-top-left-radius: 0; border-bottom-left-radius: 0; background-color: var(--surface-sunken);
+}
+.linked-arrow { padding-bottom: 10px; color: var(--purple-400); font-size: var(--text-lg); }
+.linked-hint { margin: var(--space-2) 0 var(--space-4); }
+
+/* 13. Caja física -------------------------------------------------------- */
+
+.cash-open-table td.num input { max-width: 220px; text-align: right; margin-left: auto; }
+.cash-open-table label.coin-row { cursor: pointer; }
+
+/* Datos de la tarjeta en la pestaña de la operación. */
+.card-panel {
+  margin-top: var(--space-4); padding: var(--space-4);
+  border: 1px dashed var(--border-strong); border-radius: var(--radius); background: var(--purple-50);
+}
+.card-panel[hidden] { display: none; }
+.card-fields { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 0 var(--space-3); }
+.card-field-card_number, .card-field-card_holder { grid-column: span 2; }
+.card-field-card_number input { letter-spacing: .08em; }
+.card-field-card_cvv input { letter-spacing: .3em; }
+
+/* Comprobante: pares etiqueta/valor en dos columnas. */
+.receipt-facts {
+  display: grid; grid-template-columns: max-content 1fr; gap: var(--space-2) var(--space-5);
+  margin: 0; font-size: var(--text-base);
+}
+.receipt-facts dt { color: var(--ink-500); }
+.receipt-facts dd { margin: 0; font-variant-numeric: tabular-nums; }
+
+.report-kpi { font-size: var(--text-lg); }
+
+/* 14. Adaptación a móvil -------------------------------------------------- */
 
 @media (max-width: 960px) {
   .shell { grid-template-columns: 1fr; }
@@ -585,6 +684,28 @@ tbody tr:hover { background: var(--purple-50); }
   .card { padding: var(--space-4); }
   .hero { padding: var(--space-5) var(--space-4); }
   .hero h1 { font-size: var(--text-2xl); }
+  .timer { justify-items: start; }
+  .linked-arrow { display: none; }
+  .card-fields { grid-template-columns: 1fr 1fr; }
+  .pay-option { grid-template-columns: auto auto 1fr; }
+  .pay-option-amount { grid-column: 3; text-align: left; }
+}
+
+@media (max-width: 600px) {
+  .receipt-facts { grid-template-columns: 1fr; gap: 0; }
+  .receipt-facts dd { margin-bottom: var(--space-2); }
+}
+
+/* 15. Impresión ----------------------------------------------------------- */
+/* Comprobantes y reportes de caja se imprimen: sin navegación ni botones. */
+
+@media print {
+  .sidebar, .topbar, .messages, .no-print, .btn { display: none !important; }
+  .shell { display: block; }
+  .content { padding: 0; max-width: none; }
+  body { background: #fff; }
+  .card { border-color: #ccc; box-shadow: none; break-inside: avoid; }
+  tbody tr:hover { background: none; }
 }
 
 @media (prefers-reduced-motion: reduce) {

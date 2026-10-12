@@ -26,8 +26,15 @@ Exchange Pro simula una casa de cambio:
   al cliente) y uno de venta (lo que le cobra). El de compra siempre es menor; la
   diferencia es el *spread* o margen del negocio.
 - Un usuario registra **tarjetas de crédito** en su billetera, carga saldo en
-  guaraníes con ellas, compra divisas (pagando con el saldo o directamente con una
-  tarjeta), las vende de vuelta y las retira.
+  guaraníes con ellas, compra divisas, las vende de vuelta y las retira. Cada compra
+  pasa por una **pantalla de pago** donde el precio queda congelado durante 5
+  minutos y se paga con el saldo, con otra divisa de la billetera, con una tarjeta o
+  con un código QR (simulado).
+- Un **cajero** atiende clientes en una ventanilla física: abre una sesión de caja
+  declarando el efectivo inicial de cada divisa, registra cada operación con el
+  nombre y la cédula del cliente (cobrando en efectivo, tarjeta o QR), la caja se
+  actualiza sola, y al cerrar se genera un reporte con el estado inicial, el final y
+  todas las operaciones.
 - Cualquiera puede consultar el **historial de cotizaciones** de cada divisa, en
   tabla y en gráfico.
 - Un administrador puede **adelantar un día** el reloj del sistema: cada divisa
@@ -123,24 +130,31 @@ Global-Exchange/
         ├── templates/403.html      ← página de acceso denegado
         ├── static/                 ← servidos por nginx directamente
         │   ├── css/app.css         ← la hoja de estilos completa
+        │   ├── js/payment-tab.js   ← cuenta regresiva y paneles de las pestañas de pago
+        │   ├── js/linked-amounts.js ← completa el segundo monto al escribir el primero
         │   ├── fonts/              ← Inter y Space Grotesk autoalojadas
         │   └── img/favicon.svg
         └── core/                   ← la única app de Django
             ├── models.py           ← modelo de datos
             ├── views.py            ← una función por pantalla o acción
+            ├── cashier_views.py    ← las pantallas de la pestaña Caja
             ├── forms.py            ← validación de cada formulario
             ├── roles.py            ← fuente de verdad de los roles
             ├── backends.py         ← login OIDC contra Keycloak
             ├── middleware.py       ← detección del host público
             ├── context_processors.py ← datos del menú en todas las páginas
             ├── admin.py            ← panel /django-admin/
-            ├── tests.py            ← 98 pruebas unitarias
+            ├── tests.py            ← 207 pruebas unitarias
             ├── migrations/         ← evolución del esquema
             ├── templatetags/money.py ← formato de montos
             ├── services/
             │   ├── keycloak_admin.py ← cliente del Admin API de Keycloak
             │   ├── simulation.py     ← lógica de "avanzar un día"
-            │   └── charts.py         ← cálculo del gráfico de historial
+            │   ├── charts.py         ← cálculo del gráfico de historial
+            │   ├── checkout.py       ← órdenes de compra: abrir, pagar, cancelar, vencer
+            │   ├── cashier.py        ← caja física: sesiones, operaciones y reporte
+            │   ├── pricing.py        ← conversión con dos montos vinculados (en línea y caja)
+            │   └── qr.py             ← dibujo del QR de pago simulado
             └── templates/core/     ← las plantillas HTML
                 └── _rocket.svg.html ← el logotipo, incluido en línea
 ```
@@ -231,8 +245,63 @@ saldo), `buy` (compra), `sell` (venta) o `withdraw` (retiro). Guarda la cantidad
 divisa (`amount`), el equivalente en guaraníes (`pyg_amount`), la cotización
 aplicada (`rate_used`) y, si hubo tarjeta, cuál (`payment_method`).
 
-`WalletHolding` y `WalletTransaction` apuntan a `Currency` con `on_delete=PROTECT`:
-no se puede borrar una divisa con la que alguien operó. La vista de borrado atrapa
+### `PurchaseOrder` — orden de compra
+
+Una compra en curso. La crea el formulario de compra de `/trade/` y la cierra la
+pantalla de pago. Guarda todo lo necesario para cobrarla sin volver a mirar la
+pizarra:
+
+| Campo | Tipo | Significado |
+|-------|------|-------------|
+| `wallet`, `currency` | FK | Quién compra y qué divisa. |
+| `pyg_amount` | decimal 18,2 | Guaraníes a pagar. |
+| `currency_amount` | decimal 18,6 | Divisa a recibir: `pyg_amount / rate`, redondeado hacia abajo. |
+| `rate` | decimal 18,6 | **Precio de venta congelado** al abrir la orden. |
+| `frozen_rates` | JSON | **Precio de compra congelado** de cada divisa activa (`{"USD": "7190.000000", …}`), para pagar con otra divisa. |
+| `status` | texto | `pending`, `completed`, `cancelled` o `expired`. |
+| `payment_kind` | texto | `balance`, `currency`, `card` o `qr`; vacío hasta pagar. |
+| `payment_method` | FK opcional | La tarjeta, si se pagó con tarjeta. |
+| `paid_currency`, `paid_amount` | FK / decimal | Sólo al pagar con otra divisa: cuál y cuánto se debitó. |
+| `qr_reference` | texto | Referencia aleatoria del QR simulado (`GEX-XXXXXXXXXX`). |
+| `created_at`, `expires_at`, `closed_at` | fecha y hora | Apertura, vencimiento (apertura + `PURCHASE_TIMEOUT`, 5 minutos) y cierre. |
+
+`seconds_left()` devuelve los segundos que quedan para pagar (nunca negativo) y
+`frozen_buy_rate(currency)` el precio de compra congelado de una divisa.
+
+### `CashSession`, `CashSessionBalance` y `CashTransaction` — caja física
+
+**`CashSession`** es el turno de un cajero: `cashier` (FK al usuario, `SET_NULL`),
+`cashier_name` (copia del nombre, para que el reporte sobreviva aunque se borre el
+usuario), `status` (`open` o `closed`), `opened_at` y `closed_at`. Una restricción
+única condicional (`one_open_cash_session_per_cashier`) garantiza en la base de datos
+que un cajero no tenga dos sesiones abiertas a la vez.
+
+**`CashSessionBalance`** es el efectivo de una divisa en una sesión:
+`opening_amount` (lo declarado al abrir), `current_amount` (lo que hay ahora) y
+`closing_amount` (copia de `current_amount` al cerrar; nulo mientras está abierta).
+Una fila por divisa y sesión.
+
+**`CashTransaction`** es una operación de ventanilla. El cliente **entrega**
+`amount_in` de `currency_in` y **recibe** `amount_out` de `currency_out`, siempre en
+efectivo. Se valúa pasando por guaraníes con las reglas de siempre: lo que entrega se
+toma al precio de **compra** (`rate_in`, 1 para el guaraní) y lo que recibe se cobra
+al precio de **venta** (`rate_out`); `pyg_value` es el valor en guaraníes. Esa sola
+regla cubre las tres operaciones: el cliente compra divisa, la vende, o cambia una
+divisa por otra. Además guarda `status` (`pending`, `completed`, `cancelled`,
+`expired`), `payment_method` (`cash`, `card`, `qr`), de la tarjeta sólo `card_brand`,
+`card_holder` y `card_last4` (nunca el número completo ni el código de seguridad), `qr_reference`,
+`customer_name`, `customer_document` (la cédula, sólo dígitos) y `created_at`,
+`expires_at` y `closed_at`. `description` arma el texto de la operación
+(*El cliente compra USD*, *El cliente vende USD*, *Cambio EUR → USD*).
+
+En caja el efectivo tiene otra precisión que en la billetera: el guaraní va en
+unidades enteras y las divisas en **centavos** (`cash_quantum()`), no en
+millonésimas.
+
+`WalletHolding`, `WalletTransaction`, `PurchaseOrder`, `CashSessionBalance` y
+`CashTransaction` apuntan a `Currency` con
+`on_delete=PROTECT`: no se puede borrar una divisa con la que alguien operó o intentó
+operar. La vista de borrado atrapa
 el `ProtectedError` y muestra un mensaje claro en lugar de un error 500.
 
 ### Migraciones
@@ -243,6 +312,9 @@ el `ProtectedError` y muestra un mensaje claro en lugar de un error 500.
 | `0002_seed_usd` | Siembra el dólar (del Sprint 2, cuando el dólar era la base). |
 | `0003_guarani_base_rates_payments_history` | Esquema del Sprint 3: renombra `value_in_usd` a `buy_rate`, agrega `sell_rate`, renombra `usd_balance` a `pyg_balance` y `usd_amount` a `pyg_amount`, y crea `CurrencyRate`, `SimulationState` y `PaymentMethod`. |
 | `0004_seed_guarani_and_history` | Datos del Sprint 3 (ver abajo). |
+| `0005_purchase_order` | Crea `PurchaseOrder` para la pantalla de pago. |
+| `0006_cash_desk` | Crea `CashSession`, `CashSessionBalance` y `CashTransaction` para la caja física. |
+| `0007_cash_card_details` | Agrega `card_brand` y `card_holder` a `CashTransaction`. |
 
 `0004` hace la transición de dólar a guaraní sin perder nada:
 
@@ -275,6 +347,7 @@ de verdad del lado de Django.
 | `admin` | Todo lo de `manager`, más gestionar usuarios y usar la simulación de días. |
 | `manager` | Gestionar divisas y sus precios de compra y venta. |
 | `user` | Operar: billetera, tarjetas, comprar, vender y retirar divisas. |
+| `cajero` | Operar la caja física (pestaña *Caja*). Un `admin` también puede. |
 
 En cada login, `core/backends.py` copia los roles de realm de Keycloak a grupos de
 Django con el mismo nombre, de modo que el resto de la aplicación sólo necesita
@@ -287,7 +360,18 @@ Funciones de `roles.py`: `roles_from_claims(claims)` extrae los roles conocidos 
 token, `user_roles(user)` los lee de los grupos, `has_role(user, *roles)` pregunta
 por varios a la vez, y `is_admin` / `is_manager` / `is_trader` son los atajos de uso
 diario. `is_manager` devuelve verdadero también para un `admin`: la herencia de
-capacidades está en un solo lugar.
+capacidades está en un solo lugar. Lo mismo `is_cashier`, que habilita la caja a
+`cajero` y a `admin`.
+
+**Un rol nuevo en un Keycloak ya instalado.** Keycloak importa
+`realm-export.json` sólo la primera vez que arranca, así que agregar `cajero` al
+realm export no lo crea en un Keycloak que ya estaba corriendo.
+`KeycloakAdminClient.ensure_realm_role()` lo resuelve: antes de asignar un rol
+consulta si existe y, si Keycloak responde 404, lo crea con la descripción de
+`roles.ROLE_DESCRIPTIONS`. `set_user_roles()` lo usa siempre, de modo que basta con
+asignar *Cajero* desde la pestaña *Usuarios* para que el rol aparezca. El usuario de
+demostración `demo.cajero`, en cambio, sólo existe en instalaciones nuevas (o
+después de `docker compose down -v`).
 
 El decorador `views.role_required(*roles)` envuelve una vista para exigir sesión
 iniciada y al menos uno de los roles indicados; si no se cumple lanza
@@ -342,32 +426,94 @@ más reciente primero y calcula la variación porcentual del período con
 
 ### Compra y venta — rol `user`
 
+| URL | Función | Qué hace |
+|-----|---------|----------|
+| `/trade/` | `trade` | Pizarra, formulario de compra (abre la orden) y formulario de venta. |
+| `/trade/checkout/<id>/` | `purchase_checkout` | Pantalla de pago de una orden, o su estado final si ya se cerró. Acepta `?pay=<clave>` para preseleccionar un medio de pago. |
+| `POST /trade/checkout/<id>/confirm/` | `purchase_confirm` | Cobra la orden con el medio de pago elegido (`payment_source`). |
+| `POST /trade/checkout/<id>/cancel/` | `purchase_cancel` | Cancela la orden sin mover saldo. |
+
+Las tres rutas de pago responden 404 si la orden es de otra billetera, y las dos de
+acción no hacen nada ante un `GET` (redirigen a la pantalla de pago).
+
 `/trade/` (`views.trade`) atiende las dos operaciones en una sola pantalla. Un campo
 oculto `action` (`buy` o `sell`) decide qué formulario se valida, de modo que los
 errores de uno no borran lo escrito en el otro.
 
-- **`_process_buy()`** — aplica el **precio de venta** de la divisa. Calcula
+- **Comprar** ya no cobra en el acto: llama a `checkout.create_order()`, que abre una
+  `PurchaseOrder` pendiente y redirige a la pantalla de pago. Calcula
   `pyg_amount / sell_rate` redondeando hacia abajo (`ROUND_DOWN`), para no regalar
-  fracciones. Si se paga con el saldo, lo verifica y lo descuenta; si se paga con
-  tarjeta, el saldo no se toca. Rechaza montos tan bajos que no alcancen para
-  comprar ni una millonésima de unidad.
+  fracciones, y rechaza montos tan bajos que no alcancen para comprar ni una
+  millonésima de unidad.
 - **`_process_sell()`** — aplica el **precio de compra**, descuenta la tenencia y
   acredita guaraníes en el saldo.
 
-Ambas corren dentro de `transaction.atomic()` y dejan el movimiento registrado con
-la cotización usada.
+#### La pantalla de pago (`services/checkout.py`)
+
+1. **Abrir la orden — `create_order()`.** Congela el precio de venta de la divisa
+   comprada (`rate`) y el precio de compra de todas las divisas activas
+   (`frozen_rates`), fija `expires_at = ahora + PURCHASE_TIMEOUT` y genera la
+   referencia del QR. Una billetera tiene a lo sumo una orden pendiente: abrir otra
+   cancela la anterior, para que nunca convivan dos precios congelados.
+2. **Elegir cómo pagar — `payment_options()`.** Arma la lista de medios de pago con
+   una clave estable cada uno y marca cuáles alcanzan:
+
+   | Clave | Medio | Cuándo no está disponible |
+   |-------|-------|---------------------------|
+   | `balance` | Saldo en guaraníes. | El saldo no cubre `pyg_amount`. |
+   | `currency:<id>` | Otra divisa de la billetera. No se ofrece la misma divisa que se compra, ni una que estaba inactiva al abrir la orden. | La tenencia no cubre lo necesario. |
+   | `card:<id>` | Una tarjeta registrada (cobro simulado). | La tarjeta está vencida. |
+   | `qr` | Código QR (simulado). | Siempre disponible. |
+
+   Los medios que no alcanzan se muestran deshabilitados con el motivo, en lugar de
+   esconderlos: así el usuario entiende por qué no puede usarlos.
+3. **Pagar — `confirm_order()`.** Dentro de `transaction.atomic()` bloquea la orden y
+   la billetera con `select_for_update`, de modo que un doble clic o dos pestañas no
+   cobren dos veces. Rechaza la orden si ya no está pendiente o si pasó el plazo;
+   vuelve a calcular los medios de pago con la billetera bloqueada (el saldo pudo
+   cambiar desde que se dibujó la pantalla) y mueve los saldos con las cotizaciones
+   **congeladas**, no con las de la pizarra.
+4. **Cancelar — `cancel_order()`.** Cierra la orden sin tocar saldos. Si ya había
+   vencido la registra como `expired`.
+
+**Pagar con otra divisa.** La casa de cambio le compra al usuario esa divisa al
+precio de compra congelado y con esos guaraníes cubre la compra. La cantidad a
+debitar es `pyg_amount / precio de compra`, redondeada **hacia arriba**
+(`required_amount()`): redondear hacia abajo haría que la casa de cambio entregue más
+de lo que recibe. Quedan dos movimientos: una **venta** de la divisa entregada
+(*Conversión para pagar la compra #N*) y la **compra** de la divisa pedida. El saldo
+en guaraníes no se toca.
+
+**Vencimiento sin tareas programadas.** No hay cron ni proceso en segundo plano:
+`expire_due_orders()` marca como vencidas las órdenes cuyo plazo pasó cada vez que se
+abre `/trade/` o la pantalla de pago, y `confirm_order()` vuelve a comprobar el plazo
+justo antes de cobrar. Una orden vencida nunca se cobra, aunque nadie la haya mirado.
+Cuando el vencimiento se detecta al confirmar, el cambio de estado se guarda antes de
+lanzar el error, para que el `rollback` de la transacción no lo deshaga.
+
+**La cuenta regresiva.** La plantilla `checkout.html` recibe los segundos restantes
+calculados por el servidor y cuenta desde ahí (no desde el reloj del equipo, que
+puede estar desfasado). Al llegar a cero deshabilita los botones, avisa y recarga la
+página, que ya muestra la orden como *Vencida*. El reloj del navegador es sólo un
+aviso: quien decide es el servidor.
+
+**El QR simulado (`services/qr.py`).** No hay pasarela de pagos, así que el QR no
+codifica nada legible por un banco: es un dibujo con la forma de un QR versión 2
+(25×25 módulos, tres cuadros de posición y líneas de sincronización) cuyo relleno
+sale de un SHA-256 de la referencia. `mock_qr_path()` devuelve un único `path` SVG;
+para usar un QR real basta con reemplazar esa función manteniendo la misma salida.
 
 **Vista previa de la conversión.** Antes de confirmar la compra, la pantalla muestra
-cuántas unidades de divisa va a recibir el usuario, a qué cotización, con qué medio de
-pago, y un gráfico de barras que compara lo que paga contra lo que recibiría si
+cuántas unidades de divisa va a recibir el usuario, a qué cotización, y un gráfico de
+barras que compara lo que paga contra lo que recibiría si
 vendiera en ese mismo instante: la diferencia entre las dos barras es el margen de la
-casa de cambio, hecho visible en lugar de escondido. La vista avisa además, antes de
-enviar el formulario, si se eligió pagar con el saldo y el saldo no alcanza.
+casa de cambio, hecho visible en lugar de escondido. Es una cotización indicativa: el
+precio que vale es el que se congela al pasar a la pantalla de pago.
 
-Para que funcione, `trade` publica dos datos con `json_script`: `rate_table`
-(construida por `_rate_table()`, con el código y los dos precios de cada divisa activa,
-como texto para no perder precisión) y el saldo de la billetera. Un `<script>` de la
-propia plantilla recalcula en el navegador con las mismas reglas que `_process_buy`
+Para que funcione, `trade` publica con `json_script` la `rate_table` (construida por
+`_rate_table()`, con el código y los dos precios de cada divisa activa, como texto
+para no perder precisión). Un `<script>` de la propia plantilla recalcula en el
+navegador con las mismas reglas que `create_order()`
 —dividir por el precio de venta y redondear hacia abajo a seis decimales— sin pedirle
 nada al servidor.
 
@@ -377,8 +523,9 @@ Dos aclaraciones sobre el diseño:
   navegador usa punto flotante y la del servidor `Decimal`, así que en casos extremos
   podrían diferir en la última millonésima. Lo que se acredita es siempre lo que
   calcula el servidor.
-- **La compra funciona sin JavaScript.** Sin él sólo se pierde la vista previa; el
-  formulario se envía igual y se aplica el mismo precio de venta de la pizarra.
+- **La compra funciona sin JavaScript.** Sin él se pierden la vista previa y la cuenta
+  regresiva, y el panel del QR queda siempre visible; el plazo de 5 minutos lo sigue
+  haciendo cumplir el servidor.
 
 Los dos formularios de la página tienen un campo `currency`, así que `trade` les da
 prefijos de `id` distintos (`id_buy_%s` e `id_sell_%s`). Sin eso Django emitiría dos
@@ -387,6 +534,106 @@ qué selector escuchar. Hay una prueba que falla si el problema reaparece. La co
 cambio real: comprar y vender de inmediato deja al usuario con menos guaraníes que
 al empezar, y esa pérdida es exactamente el margen
 (`test_the_spread_is_the_cost_of_a_round_trip`).
+
+### Caja física — roles `cajero` y `admin`
+
+| URL | Función | Qué hace |
+|-----|---------|----------|
+| `/caja/` | `cash_desk` | Sin sesión: formulario de apertura. Con sesión: efectivo por divisa, cotizador y operaciones del turno. Abajo, el historial de sesiones (las propias; un `admin` ve las de todos). |
+| `POST /caja/abrir/` | `cash_session_open` | Abre la sesión con el efectivo inicial declarado. |
+| `POST /caja/operaciones/nueva/` | `cash_quote` | Cotiza una operación y abre su pestaña. |
+| `/caja/operaciones/<id>/` | `cash_operation` | Pestaña de la operación: medio de pago y datos del cliente; si ya terminó, el comprobante imprimible. |
+| `POST /caja/operaciones/<id>/confirmar/` | `cash_operation_confirm` | Ejecuta la operación y mueve el efectivo. |
+| `POST /caja/operaciones/<id>/cancelar/` | `cash_operation_cancel` | Cancela sin mover efectivo. |
+| `/caja/cerrar/` | `cash_session_close` | `GET`: vista previa del reporte y confirmación. `POST`: cierra y redirige al reporte. |
+| `/caja/sesiones/<id>/` | `cash_session_report` | Reporte de la sesión (parcial si sigue abierta), imprimible. |
+| `/caja/sesiones/<id>/csv/` | `cash_session_report_csv` | El mismo reporte en CSV. |
+
+Las vistas están en `core/cashier_views.py` y la lógica en `services/cashier.py`.
+Quién ve qué: una operación sólo la completa o cancela el cajero dueño de la sesión
+(cualquier otro recibe 404); un `admin` puede ver operaciones y reportes de
+cualquier cajero, en sólo lectura. Otro cajero recibe 403 en un reporte ajeno.
+
+**El flujo** (`services/cashier.py`):
+
+1. **`open_session()`** crea la sesión y una `CashSessionBalance` por cada divisa
+   activa con el efectivo declarado (al menos una divisa debe tener efectivo).
+2. **`quote()`** recibe qué entrega y qué recibe el cliente, un monto y el **ancla**
+   (`in` u `out`): de qué lado es el monto que escribió el cajero. El otro lado lo
+   calcula `pricing.convert()` (ver abajo) a la precisión de efectivo de cada divisa.
+   Congela `rate_in` y `rate_out`, fija `expires_at` (`CASH_QUOTE_TIMEOUT`, los
+   mismos 5 minutos que la compra en línea) y rechaza la cotización si la caja no
+   tiene el efectivo a entregar. Igual que en línea, hay una sola operación
+   pendiente por sesión: cotizar otra cancela la anterior.
+3. **`confirm()`** bloquea operación, sesión y saldos con `select_for_update`,
+   vuelve a comprobar el plazo y que haya efectivo (pudo cambiar desde la
+   cotización) y mueve la caja:
+
+   | Medio de pago | Entra a la caja | Sale de la caja |
+   |---------------|-----------------|-----------------|
+   | Efectivo | `amount_in` de `currency_in` | `amount_out` de `currency_out` |
+   | Tarjeta | nada | `amount_out` de `currency_out` |
+   | QR | nada | `amount_out` de `currency_out` |
+
+   Si el cliente paga en efectivo con una divisa sin fila de saldo en la sesión, la
+   fila se crea en ese momento con apertura cero.
+4. **`close_session()`** cancela lo pendiente, copia `current_amount` a
+   `closing_amount` en cada divisa y marca la sesión como cerrada.
+5. **`session_report()`** arma, por divisa, apertura, efectivo que entró, efectivo
+   que salió, cierre y lo cobrado con tarjeta y con QR (que no pasa por la caja pero
+   hay que conciliar con el POS y el banco), más la lista de operaciones. Incluye un
+   control de coherencia: si `apertura + entradas − salidas` no da el cierre, el
+   reporte marca la fila con *No cuadra*. No debería pasar nunca; si pasa, alguien
+   tocó los saldos por fuera de la aplicación.
+
+**Validación del cliente** (`forms.CashPaymentForm`): nombre de al menos 3
+caracteres (con los espacios normalizados) y cédula de 5 a 9 dígitos (se aceptan
+puntos y guiones al escribirla, se guarda sólo con dígitos).
+
+**Pago con tarjeta en caja.** Se piden todos los datos: número completo (13 a 19
+dígitos, con dígito verificador Luhn), titular, vencimiento `MM/AA` o `MM/AAAA` (no
+vencida) y código de seguridad (3 dígitos; 4 si la marca es American Express). El
+formulario valida todo y entrega a `confirm()` sólo **marca, titular y últimos 4
+dígitos**; el número completo y el código se descartan ahí mismo y nunca llegan a la
+base de datos (guardarlos violaría PCI-DSS). El código usa `PasswordInput`, así que
+si el formulario vuelve con errores no se reenvía en el HTML.
+
+#### Montos vinculados (`services/pricing.py` y `static/js/linked-amounts.js`)
+
+La compra en línea y la cotización de caja tienen el mismo formulario de dos montos,
+cada uno con su selector de divisa: lo que **entrega** el cliente y lo que
+**recibe**. Al escribir en uno, `linked-amounts.js` completa el otro y anota en el
+campo oculto `anchor` cuál escribió el usuario.
+
+El servidor **no confía en el monto completado por el navegador**: toma sólo el monto
+del ancla y recalcula el otro con `pricing.convert()`. Sin JavaScript no hay ancla y
+`LinkedAmountsMixin` usa el monto que se haya escrito (si son los dos, el que recibe
+el cliente). La cuenta pasa siempre por guaraníes:
+
+| Ancla | Se respeta | Se calcula |
+|-------|------------|------------|
+| `in` | `amount_in` | `amount_out = amount_in × rate_in / rate_out`, hacia **abajo** |
+| `out` | `amount_out` | `amount_in = amount_out × rate_out / rate_in`, hacia **arriba** |
+
+`rate_in` es el precio de compra de lo que entrega el cliente y `rate_out` el precio
+de venta de lo que recibe (1 para el guaraní). La compra en línea además redondea el
+valor intermedio a guaraníes enteros (`value_quantum`), porque la orden se cobra en
+guaraníes; la caja no, porque cada lado es efectivo. Las precisiones viajan al
+navegador en `pricing.rate_table()`: divisas con 6 decimales en línea y 2 en caja,
+guaraní sin decimales. `linked-amounts.js` repite exactamente esta cuenta: **si se
+cambia una, hay que cambiar la otra.**
+
+En la compra en línea, "pagás con" ofrece guaraníes y las divisas activas de la
+billetera. Si se elige otra divisa, la orden igual se guarda en guaraníes y la
+pantalla de pago se abre con esa divisa preseleccionada (`?pay=currency:<id>`).
+
+**El CSV** usa punto y coma como separador, coma decimal y un BOM UTF-8, que es lo
+que necesita Excel en español para abrirlo con columnas y acentos correctos.
+
+**La pestaña de la operación** comparte con la pantalla de pago en línea el script
+`static/js/payment-tab.js` (cuenta regresiva y paneles que dependen del medio de
+pago, marcados con `data-show-for`). Comprobantes y reportes tienen estilos de
+impresión (`@media print`) que ocultan la navegación y los botones.
 
 ### Gestión de divisas — roles `admin` y `manager`
 
@@ -608,7 +855,7 @@ forma fiable combinado con `alias`.
 
 ## 8. Pruebas
 
-98 pruebas unitarias en `backend/core/tests.py`, todas en verde.
+207 pruebas unitarias en `backend/core/tests.py`, todas en verde.
 
 ```bash
 # Con el stack levantado
@@ -623,7 +870,13 @@ migraciones y la destruye al terminar: las pruebas nunca tocan los datos reales.
 Como las migraciones siembran las divisas de demostración, varias pruebas se apoyan
 en ellas. Cuando una prueba necesita cotizaciones de números redondos usa el código
 `XTS` (reservado por la norma ISO 4217 justamente para pruebas) con compra 7.000 y
-venta 8.000, lo que hace que las cuentas sean exactas y verificables a mano.
+venta 8.000, lo que hace que las cuentas sean exactas y verificables a mano. Las
+pruebas de pago usan además `XTA` (compra 4.000 / venta 5.000) como divisa con la
+que pagar.
+
+Las compras de las pruebas pasan por el helper `buy(client, currency, monto, medio)`,
+que abre la orden en `/trade/` y la confirma en la pantalla de pago, igual que un
+usuario. Para probar el vencimiento no se espera: se mueve `expires_at` al pasado.
 
 | Grupo | Nº | Qué cubre |
 |-------|----|-----------|
@@ -635,15 +888,20 @@ venta 8.000, lo que hace que las cuentas sean exactas y verificables a mano.
 | `WalletDepositFormTests` | 2 | El selector de tarjeta sólo acepta tarjetas de la billetera propia. |
 | `DeleteAccountFormTests` | 2 | La confirmación exige la palabra `DELETE`. |
 | `RoleRequiredViewTests` | 8 | Acceso por rol a cada sección, incluido que la simulación sea sólo de `admin` y que el historial sea público. |
-| `WalletTests` | 19 | Alta y baja de tarjetas (incluido el render de sus pantallas y que no se pueda borrar una ajena), carga de saldo con y sin tarjeta, compra con saldo y con tarjeta al precio de venta, compra con tarjeta ajena rechazada, venta al precio de compra, el margen como costo de ida y vuelta, y los límites de saldo y tenencia en venta y retiro. |
+| `WalletTests` | 19 | Alta y baja de tarjetas (incluido el render de sus pantallas y que no se pueda borrar una ajena), carga de saldo con y sin tarjeta, compra con saldo y con tarjeta al precio de venta (por la pantalla de pago), compra con tarjeta ajena rechazada, venta al precio de compra, el margen como costo de ida y vuelta, y los límites de saldo y tenencia en venta y retiro. |
 | `NavigationTests` | 4 | La barra lateral se dibuja, un visitante anónimo no ve las secciones privadas, un usuario no ve las de administración, la página actual queda marcada como activa y la hoja de estilos y el logotipo están enlazados. |
 | `FewerClicksTests` | 6 | `?currency=` y `?sell=` dejan la divisa preseleccionada (y una divisa inexistente en la URL no rompe nada), el alta de tarjeta está en la propia billetera, los montos predefinidos se dibujan y una tarjeta se borra desde su fila. |
 | `AdvanceWeekTests` | 7 | `advance_days(7)` mueve el reloj siete días, deja siete puntos de historial, informa la variación **neta** del período y rechaza un conteo inválido; el botón funciona sólo por POST y sólo para un administrador. |
-| `BuyPreviewTests` | 7 | La vista previa se renderiza, la tabla de cotizaciones publica ambos precios de cada divisa activa (y no la base ni las inactivas), el saldo se publica para poder avisar, los dos formularios no comparten ids y la cuenta de la vista previa coincide con la que hace el servidor. |
+| `BuyPreviewTests` | 7 | La vista previa se renderiza, la tabla de cotizaciones publica ambos precios de cada divisa activa (y no la base ni las inactivas), el formulario de compra lleva al paso de pago, el guaraní puede pagar pero no comprarse, los dos formularios no comparten ids y la cuenta de la vista previa coincide con la que hace el servidor. |
 | `SimulationTests` | 7 | El reloj avanza, se recotizan todas las activas y ninguna inactiva, el guaraní queda fuera, cada cambio cae dentro de −5 %/+7 % (25 semillas), la compra sigue por debajo de la venta tras 25 días, y cada día deja su punto de historial. |
 | `SimulationViewTests` | 4 | El botón avanza el día, un `GET` no, el panel muestra el antes y después, y ese resumen se muestra una sola vez. |
 | `CurrencyHistoryViewTests` | 4 | Divisa por defecto, selección por parámetro, un período más corto devuelve menos puntos y la tabla viene ordenada de lo más nuevo a lo más viejo. |
 | `RateChartTests` | 4 | Historial vacío, un punto por cotización en cada serie, serie plana sin división por cero y etiquetas del eje sin amontonarse. |
+| `CheckoutTests` | 43 | **Montos vinculados:** pagar o recibir como ancla, redondeo a guaraníes enteros, pagar con una divisa de la billetera (llega preseleccionada a la pantalla de pago), sólo guaraníes y divisas propias pueden pagar, misma divisa rechazada, guaraníes sin decimales, sin JavaScript y sin monto; la página usa `linked-amounts.js` y no muestra comentarios de plantilla. **Abrir:** la orden queda pendiente sin cobrar nada, congela el precio de venta y los precios de compra, vence a los 5 minutos, rechaza montos ínfimos, abrir otra cancela la anterior y la pizarra enlaza la pendiente. **Pantalla:** muestra los cuatro tipos de medio de pago y el reloj, no ofrece la misma divisa que se compra, deshabilita los que no alcanzan, sugiere agregar una tarjeta y da 404 con órdenes ajenas. **Pagar:** con saldo, con saldo insuficiente (la orden sigue abierta), con tarjeta, con tarjeta vencida o ajena (rechazado), con otra divisa (incluida la venta de conversión y el redondeo hacia arriba), con divisa insuficiente, con QR, con un medio inventado, por `GET` (no paga), dos veces (cobra una) y el comprobante. **Cancelar y vencer:** cancelar no mueve nada, una orden cancelada o vencida no se cobra, el vencimiento se guarda aunque se rechace el pago y una orden vencida no se ofrece en la pizarra. **Precio congelado:** si cambian la cotización de la divisa comprada, la de la divisa con que se paga o se adelanta la simulación, se cobra igual el precio congelado. |
+| `CashierRoleTests` | 6 | `cajero` es un rol conocido y se lee del token; cajero y admin operan la caja, usuario y gestor no (403); la pestaña *Caja* sólo aparece a quien puede usarla; y `ensure_realm_role()` crea en Keycloak el rol que falta (con el cliente HTTP simulado) y no recrea uno existente. |
+| `CashDeskTests` | 51 | **Montos vinculados:** dos campos con su divisa y sus marcas para el script, escribir lo que entrega el cliente, monto que no alcanza ni un centavo, el servidor recalcula desde el ancla e ignora el otro campo, sin JavaScript y sin monto. **Tarjeta:** exige número válido, titular, vencimiento vigente y código (4 dígitos en Amex), y nunca guarda ni reenvía el número completo o el código. **Apertura:** formulario con el guaraní primero, saldos iniciales, rechazo sin efectivo, con decimales de más o negativo, una sola sesión abierta por cajero, un admin también abre. **Cotizar:** no mueve efectivo, el monto es siempre lo que recibe el cliente (sin selector de lado), el cliente compra, vende o cambia dos divisas, redondeo a favor de la casa, rechazo si la caja no alcanza, misma divisa, decimales de más o sin sesión; cotizar otra cancela la anterior. **Operación:** ofrece efectivo, tarjeta y QR y pide nombre y cédula; efectivo mueve los dos lados, tarjeta y QR sólo la salida; tarjeta exige 4 dígitos; divisa sin saldo previo; validación de la cédula; cotización vencida; precio congelado; la caja se revisa de nuevo al confirmar; doble confirmación; `GET` no ejecuta; cancelar; comprobante; otro cajero recibe 404 y un admin sólo mira. **Cierre y reporte:** vista previa con aviso de lo pendiente, cierre que congela saldos y cancela lo pendiente, sin operaciones después de cerrar, reporte con estado inicial y final que cuadra, reporte parcial, CSV, permisos del reporte e historial de sesiones; filtros `cash`, `ci` y `sub`. |
+| `PricingTests` | 5 | `pricing.convert()` con cada ancla y su redondeo, el redondeo del valor a guaraníes enteros, un ancla inválida, y la tabla de cotizaciones que recibe el navegador. |
+| `MockQrTests` | 4 | El QR es determinista por referencia, cambia con la referencia, dibuja los tres cuadros de posición, y el filtro `countdown` formatea el reloj. |
 
 ### Qué no cubren las pruebas automáticas
 
@@ -772,6 +1030,17 @@ sobre la marcha, ya terminados los anteriores.
 | 7 | Vista previa de la conversión antes de confirmar la compra | Panel con las dos cifras y un gráfico de barras que compara lo pagado con el valor de reventa inmediata, calculado en el navegador a partir de la tabla de cotizaciones que publica la vista. |
 | 8 | Rediseño de la interfaz: paleta morada y rosa, motivo hexagonal, logotipo de cohete, navegación en una barra lateral, botones más legibles y menos clics por acción | Hoja de estilos propia en `backend/static/css/app.css` con tipografías autoalojadas; ver la sección 7. |
 
+Después se agregó la **pantalla de pago** (`/trade/checkout/<id>/`): comprar abre una
+orden con el precio congelado 5 minutos, que se paga con saldo, con otra divisa de la
+billetera (convertida a guaraníes por detrás), con tarjeta o con un QR simulado, y
+que el usuario confirma o cancela. Ver la sección 6.
+
+Más tarde se agregó la **caja física** (pestaña *Caja*, rol `cajero`): sesiones con
+efectivo inicial por divisa, operaciones de ventanilla en su propia pestaña con
+nombre y cédula del cliente y cobro en efectivo, tarjeta o QR, y un reporte al
+cerrar con el estado inicial, el final y todas las operaciones. Ver las secciones 4
+y 6.
+
 Se agregó también la **venta de divisas** (`/trade/`, acción `sell`), que no estaba
 pedida explícitamente pero hacía falta para que la distinción entre precio de compra
 y de venta se pudiera ver de punta a punta: sin ella, el precio de compra nunca
@@ -804,6 +1073,26 @@ aproximado, mover las tarjetas durante el sprint y no reutilizar códigos `FX-XX
 - **El cobro con tarjeta es simulado.** No hay pasarela de pago: registrar una
   tarjeta y "cobrarla" sólo deja el movimiento anotado. Es lo adecuado para un
   proyecto de aprendizaje, pero es lo primero que habría que cambiar para algo real.
+- **El QR de pago es un dibujo.** No codifica ningún estándar de pago ni hay un banco
+  que avise cuándo se pagó: el usuario pulsa *Confirmar pago* y se da por cobrado.
+  Integrar una pasarela real implica reemplazar `services/qr.py` y confirmar la
+  orden desde el aviso (*webhook*) del banco, no desde el botón.
+- **Las órdenes vencidas se marcan de forma perezosa.** Mientras nadie abra la
+  pizarra o la pantalla de pago, una orden vencida figura como `pending` en la base
+  (aunque nunca se puede cobrar). Si hiciera falta un reporte exacto, alcanza con un
+  comando programado que llame a `expire_due_orders()`.
+- **El cierre de caja no tiene arqueo.** El saldo final es el que calcula el sistema
+  a partir de las operaciones; el cajero no declara cuánto contó al cerrar, así que
+  un faltante o sobrante físico no queda registrado. Agregarlo es sumar un monto
+  contado por divisa al formulario de cierre y mostrar la diferencia en el reporte.
+- **En caja, lo que recibe el cliente siempre es efectivo.** No hay pago al cliente
+  por transferencia: si vende divisa, cobra los guaraníes en efectivo.
+- **Sólo cédula paraguaya.** El cliente se identifica con cédula de identidad
+  (sólo dígitos). Un turista con pasaporte no se puede registrar todavía.
+- **Las horas se muestran en UTC.** `TIME_ZONE = "UTC"` en `settings.py`, así que
+  comprobantes y reportes de caja muestran la hora tres horas adelantada respecto de
+  Paraguay. Cambiarlo a `America/Asuncion` arregla la presentación (las fechas se
+  guardan en UTC igual, porque `USE_TZ = True`).
 - **La simulación no tiene marcha atrás.** Se puede avanzar días, no volver. Para
   reiniciar el historial hay que borrar `CurrencyRate` y `SimulationState`
   (`docker compose down -v` deja todo como recién instalado).

@@ -32,17 +32,23 @@ docker compose up -d --build
 
 ## 2. Usuarios de prueba
 
-El proyecto viene con tres cuentas ya creadas, una por cada rol. **Las tres usan la
-misma contraseña.**
+El proyecto viene con cuatro cuentas ya creadas, una por cada rol. **Las cuatro usan
+la misma contraseña.**
 
 | Usuario | Contraseña | Rol | Qué puede hacer |
 |---------|-----------|-----|-----------------|
 | `demo.admin` | `ChangeMe123!` | Administrador | Todo: operar, gestionar divisas, simular días y gestionar usuarios. |
 | `demo.manager` | `ChangeMe123!` | Gestor | Gestionar divisas y sus precios de compra y venta. |
 | `demo.customer` | `ChangeMe123!` | Usuario | Operar: billetera, tarjetas, comprar, vender y retirar divisas. |
+| `demo.cajero` | `ChangeMe123!` | Cajero | Atender la caja física: abrir y cerrar caja y registrar operaciones de clientes en ventanilla. |
 
 Correos asociados: `demo.admin@example.com`, `demo.manager@example.com`,
-`demo.customer@example.com`.
+`demo.customer@example.com`, `demo.cajero@example.com`.
+
+> **Si Keycloak ya estaba instalado antes de que existiera la caja**, la cuenta
+> `demo.cajero` no aparece sola (las cuentas de demostración se crean sólo la primera
+> vez que arranca Keycloak). Creala desde **Usuarios** con el rol *Cajero*: el
+> sistema crea el rol en Keycloak si todavía no existe.
 
 También existe la cuenta de administrador de **Keycloak** (la consola de identidad,
 no el sitio): usuario `admin`, contraseña `change-me`. Sirve para crear usuarios y
@@ -85,6 +91,7 @@ La barra lateral muestra solamente las pestañas que el rol permite usar:
 | **Cotizaciones** | Todos, incluso sin iniciar sesión. |
 | **Panel** | Con sesión iniciada. |
 | **Mi billetera** y **Comprar y vender** | Rol usuario. |
+| **Caja** | Roles cajero y administrador. |
 | **Divisas** | Roles gestor y administrador. |
 | **Simulación** | Rol administrador. |
 | **Usuarios** | Rol administrador. |
@@ -248,48 +255,86 @@ historial.
 
 ### 8.1 Comprar divisa con guaraníes
 
-Se aplica el **precio de venta** de la divisa.
+Se aplica el **precio de venta** de la divisa. Comprar tiene dos pasos: primero se
+dice qué y cuánto, y después se elige cómo pagar.
 
-1. **Divisa a comprar** — cualquiera de las activas (ya viene elegida si llegaste con
-   el botón *Comprar* de la pizarra).
-2. **Monto a gastar (Gs.)** — cuántos guaraníes se quieren gastar.
-3. **Pagar con** — dos opciones:
-   - *Saldo en guaraníes* (muestra entre paréntesis cuánto hay disponible), o
-   - una de las tarjetas registradas, que se cobra directamente **sin pasar por el
-     saldo**.
+**Paso 1 — qué comprar.** El formulario *Comprar divisa* tiene dos montos, cada uno
+con su selector de divisa:
+
+1. **Monto que pagás** y, al lado, **con qué pagás**: guaraníes o cualquier divisa
+   que tengas en tu billetera.
+2. **Monto que recibís** y, al lado, **qué divisa comprás** (ya viene elegida si
+   llegaste con el botón *Comprar* de la pizarra).
+3. **Escribí uno de los dos montos: el otro se completa solo.** Por ejemplo, escribí
+   "100" en *Monto que recibís* para saber cuántos guaraníes cuestan 100 dólares, o
+   "1000000" en *Monto que pagás* para saber cuántos dólares te da un millón. Si
+   cambiás una divisa, se recalcula el otro monto.
 4. Revisar la **vista previa de la operación** (ver abajo).
-5. **Comprar**.
+5. **Continuar al pago**. Todavía no se cobra nada.
+
+Se respeta exactamente el monto que escribiste; el otro se redondea a favor de la
+casa (lo que pagás, hacia arriba; lo que recibís, hacia abajo). Si pagás con otra
+divisa, la pantalla de pago se abre con esa divisa ya elegida como medio de pago.
+
+**Paso 2 — la pantalla de pago.** Se abre la pantalla *Pago de la compra #N* con:
+
+- **El resumen**: cuántos guaraníes pagás y cuánta divisa recibís.
+- **El precio congelado**: la cotización quedó fijada al abrir la compra. Si mientras
+  tanto la pizarra cambia (por ejemplo, porque un administrador adelantó un día), tu
+  compra **mantiene el precio del inicio**, y la pantalla te avisa cuál es el precio
+  nuevo.
+- **Una cuenta regresiva de 5 minutos.** Es el plazo para confirmar. En el último
+  minuto se pone rosa. Si llega a cero, la compra **se cancela sola** y no se cobra
+  nada; para comprar hay que empezar de nuevo, ya con el precio actual.
+- **Los medios de pago** (se elige uno):
+
+  | Medio | Qué pasa al confirmar |
+  |-------|-----------------------|
+  | **Saldo en guaraníes** | Se descuenta del saldo de la billetera. |
+  | **Otra divisa de tu billetera** (una opción por cada divisa que tengas) | La casa de cambio te compra esa divisa al precio de compra congelado y con esos guaraníes paga la compra. La opción dice exactamente cuánto se va a debitar. El saldo en guaraníes no se toca. |
+  | **Una tarjeta registrada** | Se cobra a la tarjeta (simulado). El saldo no se toca. |
+  | **Código QR** | Aparece un QR con una referencia y el monto. Se escanea con la app del banco y después se pulsa *Confirmar pago*. **Es simulado:** todavía no hay un banco real detrás, así que no se cobra nada fuera de la aplicación. |
+
+  Los medios que no alcanzan (saldo insuficiente, poca cantidad de la divisa, tarjeta
+  vencida) aparecen en gris con el motivo, y no se pueden elegir. No se ofrece pagar
+  con la misma divisa que se está comprando. Si no tenés tarjetas, la pantalla tiene
+  un enlace a la billetera para agregar una.
+
+- **Confirmar pago** — cobra con el medio elegido, acredita la divisa y vuelve a
+  *Comprar y vender* con un mensaje que dice cuánto se compró, cuánto se pagó y a qué
+  precio.
+- **Cancelar compra** — cierra la compra sin cobrar nada.
+
+Si salís de la pantalla de pago sin confirmar ni cancelar, la pestaña *Comprar y
+vender* muestra un aviso **"Tenés un pago pendiente"** con un enlace para volver,
+mientras no venza el plazo. Sólo puede haber una compra pendiente a la vez: si empezás
+otra, la anterior se cancela.
 
 El sistema calcula cuánta divisa corresponde dividiendo el monto por el precio de
-venta, redondeando siempre hacia abajo. El mensaje de confirmación dice cuánto se
-compró, cuánto se pagó y a qué cotización.
+venta, redondeando siempre hacia abajo. Al pagar con otra divisa, la cantidad a
+entregar se redondea hacia arriba a la millonésima, para que alcance a cubrir el
+monto.
 
 #### La vista previa de la operación
 
-Debajo del formulario, **antes de pulsar Comprar**, aparece un panel que se actualiza
-solo cada vez que se cambia la divisa, el monto o el medio de pago. Sirve para no tener
-que confirmar a ciegas.
+Debajo del formulario, **antes de pulsar Continuar al pago**, aparece un panel que se
+actualiza solo cada vez que se cambia la divisa o el monto. Sirve para no tener que
+avanzar a ciegas.
 
 Muestra:
 
 - **Entregas → Recibes** — los guaraníes que se van a pagar y, al lado, exactamente
   cuántas unidades de la divisa se van a recibir.
-- **La cotización aplicada** — el precio de venta que se está usando, y de dónde va a
-  salir el dinero (el saldo o una tarjeta concreta).
-- **Un gráfico de dos barras** — la barra naranja de arriba es lo que se paga ahora; la
-  barra azul de abajo es lo que se recibiría si se vendiera la divisa de inmediato. La
+- **La cotización aplicada** — el precio de venta que se está usando.
+- **Un gráfico de dos barras** — la barra de arriba es lo que se paga ahora; la
+  barra de abajo es lo que se recibiría si se vendiera la divisa de inmediato. La
   segunda es más corta, y esa diferencia es el margen de la casa de cambio. Debajo del
   gráfico se indica cuánto es esa diferencia, en guaraníes y en porcentaje.
-- **Un aviso en rojo** si se eligió pagar con el saldo y el saldo no alcanza, para
-  enterarse antes de enviar el formulario y no después.
 
-La vista previa es sólo informativa: el monto que finalmente se acredita es el que
-calcula el servidor al confirmar. Si el navegador tiene JavaScript deshabilitado el
-panel no se muestra, pero la compra funciona igual, con el mismo precio de venta que
-figura en la pizarra.
-
-Si se elige pagar con el saldo y no alcanza, la compra se rechaza con un aviso y no
-se descuenta nada.
+La vista previa es sólo informativa: el precio que vale es el que se congela al pasar
+a la pantalla de pago. Si el navegador tiene JavaScript deshabilitado el panel no se
+muestra y la pantalla de pago no muestra la cuenta regresiva, pero todo funciona
+igual, y el plazo de 5 minutos se sigue respetando.
 
 ### 8.2 Vender divisa y recibir guaraníes
 
@@ -400,7 +445,105 @@ Pestaña **Usuarios**. Administra las cuentas directamente en Keycloak.
 
 ---
 
-## 12. Panel y Cuenta
+## 12. Caja (roles cajero y administrador)
+
+La pestaña **Caja** es la ventanilla física de la casa de cambio: el cajero atiende
+a clientes que vienen en persona, que no necesitan tener cuenta en el sistema.
+
+### 12.1 Abrir la caja
+
+Al entrar sin una caja abierta aparece **Abrir caja**: una fila por cada divisa
+activa, con el guaraní primero. Contá el efectivo del cajón y escribí cuánto hay de
+cada una (por ejemplo Gs. 10.000.000, 5.000 USD y 5.000 EUR); las que no tengas
+dejalas en cero. Los guaraníes van sin decimales y las demás divisas con hasta dos
+(centavos). Pulsá **Abrir caja**.
+
+Cada cajero puede tener una sola caja abierta a la vez.
+
+### 12.2 La caja abierta
+
+Con la caja abierta se ve:
+
+- **Efectivo en caja** — por divisa, lo que había al abrir, lo que hay ahora y la
+  diferencia (▲ si entró más de lo que salió, ▼ al revés).
+- **Nueva operación** — el cotizador (ver abajo).
+- **Operaciones de esta sesión** — cada operación realizada, con el cliente, su
+  cédula, lo que entregó, lo que recibió y el medio de pago. El botón
+  **Comprobante** vuelve a mostrar el comprobante para imprimirlo.
+- Arriba a la derecha, **Reporte parcial** (el reporte de cómo va el turno) y
+  **Cerrar caja**.
+
+### 12.3 Registrar una operación
+
+**Paso 1 — cotizar.** En *Nueva operación*:
+
+1. **El cliente entrega** — la divisa que trae el cliente (guaraníes si viene a
+   comprar dólares; dólares si viene a venderlos).
+2. **El cliente recibe** — la divisa que se lleva.
+3. **Monto que entrega el cliente** o **Monto que recibe el cliente** — se escribe
+   uno de los dos ("quiero 100 dólares" o "tengo Gs. 1.000.000") y el otro se
+   completa solo.
+4. **Cotizar operación**.
+
+Las cotizaciones son las de la pizarra: lo que entrega el cliente se le toma al
+**precio de compra** y lo que recibe se le cobra al **precio de venta**. Si cambia
+una divisa por otra (por ejemplo euros por dólares), se pasa por guaraníes con esas
+mismas dos reglas. Se respeta el monto que escribiste y el otro se redondea a favor de
+la casa: lo que paga el cliente, hacia arriba; lo que recibe, hacia abajo (al guaraní
+entero o al centavo).
+
+Si en la caja no hay suficiente efectivo de la divisa que se lleva el cliente, el
+sistema no deja cotizar y avisa cuánto hay.
+
+**Paso 2 — la pestaña de la operación.** Se abre una pestaña para esa operación:
+
+- Arriba, **lo que entrega y lo que recibe el cliente**, la cotización congelada y
+  cuánto efectivo va a quedar en la caja después de entregar.
+- **Una cuenta regresiva de 5 minutos.** Es lo que dura la cotización. Si vence, la
+  operación se cancela sola sin mover efectivo y hay que cotizar de nuevo. Si
+  mientras tanto la pizarra cambia, se respeta la cotización congelada y la pantalla
+  avisa del cambio.
+- **¿Cómo paga el cliente?**:
+
+  | Medio | Qué pasa con la caja |
+  |-------|----------------------|
+  | **Efectivo** | Entra a la caja lo que paga el cliente y sale lo que recibe. |
+  | **Tarjeta de crédito** | Se cobra con el POS. No entra efectivo; sólo sale lo que recibe el cliente. Hay que cargar **todos los datos de la tarjeta**: número completo, nombre del titular, vencimiento (MM/AA) y código de seguridad del dorso (4 dígitos al frente si es American Express). |
+  | **Código QR** | Aparece un QR para que el cliente lo escanee con la app de su banco. No entra efectivo; sólo sale lo que recibe. **Es simulado**: todavía no hay un banco real detrás. |
+
+  Lo que recibe el cliente se entrega **siempre en efectivo**.
+- **Datos del cliente**: **nombre y apellido** y **cédula de identidad** (con o sin
+  puntos; se aceptan de 5 a 9 dígitos).
+- **Confirmar operación** — se registra la operación, se actualiza el efectivo de la
+  caja y se muestra el **comprobante**, que se puede imprimir.
+- **Cancelar operación** — se descarta sin mover efectivo.
+
+Sólo hay una operación cotizada a la vez: si cotizás otra, la anterior se cancela.
+Si salís de la pestaña sin terminar, la caja muestra un aviso con un enlace para
+volver mientras la cotización siga vigente.
+
+### 12.4 Cerrar la caja y el reporte
+
+**Cerrar caja** muestra primero el reporte de cómo quedó el turno. Si hay una
+operación cotizada sin confirmar, avisa que se va a cancelar. Al pulsar **Cerrar caja
+y generar reporte** se guarda el efectivo final y se abre el reporte, que tiene:
+
+- **Estado inicial y final de la caja** — por divisa: apertura, efectivo que entró,
+  efectivo que salió, cierre y diferencia.
+- **Cobros que no entran a la caja** — lo cobrado con tarjeta y con QR, por divisa,
+  para controlarlo contra el POS y el banco.
+- **Operaciones** — todas las realizadas, con hora, cliente, cédula, qué entregó, qué
+  recibió, medio de pago y valor en guaraníes.
+
+Botones: **Imprimir** (la impresión sale sin menú ni botones) y **Descargar CSV**
+(se abre directo en Excel). Después de cerrar ya no se pueden registrar operaciones
+en esa caja; para seguir atendiendo hay que abrir una nueva.
+
+Abajo de la pestaña *Caja* está el historial de **sesiones anteriores**, con un
+enlace al reporte de cada una. Un administrador ve las sesiones de todos los cajeros
+y puede abrir sus reportes y comprobantes, pero no completar operaciones de otro.
+
+## 13. Panel y Cuenta
 
 **Panel** confirma que la sesión sigue activa y lista los accesos que permite el rol
 actual. **Cuenta** muestra el nombre visible, el correo y el usuario, y da acceso a
@@ -409,7 +552,7 @@ borra la cuenta en Keycloak de forma definitiva.
 
 ---
 
-## 13. Recorrido de prueba completo
+## 14. Recorrido de prueba completo
 
 Para verificar que todo funciona de punta a punta, en unos cinco minutos:
 
@@ -421,49 +564,109 @@ Para verificar que todo funciona de punta a punta, en unos cinco minutos:
    `•••• •••• •••• 1111`.
 3. Cargar saldo: *Cargar Gs. 500.000 de prueba*. El saldo pasa a Gs. 500.000.
 4. Ir a **Comprar y vender** y pulsar el botón **Comprar** de la fila del dólar:
-   el formulario debe abrirse con USD ya seleccionado. Gastar Gs. 100.000 pagando con
-   el saldo y verificar que la cantidad recibida sea el monto dividido por el precio de
-   **venta**.
+   el formulario debe abrirse con USD ya seleccionado. Escribir 100.000 en *Monto que
+   pagás* (los dólares se completan solos) y pulsar
+   **Continuar al pago**: debe abrirse la pantalla de pago con la cuenta regresiva en
+   4:59. Elegir el **saldo**, confirmar y verificar que la cantidad recibida sea el
+   monto dividido por el precio de **venta**.
 5. Comprar otra vez, ahora eligiendo la **tarjeta** como medio de pago. El saldo no
    debe cambiar, pero la tenencia de dólares sí.
-6. **Vender** la mitad de los dólares. Verificar que los guaraníes recibidos
+6. Comprar euros por Gs. 50.000 y pagar **con dólares** de la billetera: la opción
+   debe decir cuántos dólares se debitan. Al confirmar, en *Movimientos recientes*
+   aparecen una venta de dólares (*Conversión para pagar la compra*) y la compra de
+   euros.
+7. Abrir otra compra, elegir **Código QR**: debe verse el QR con su referencia.
+   Pulsar **Cancelar compra**: no se cobra nada.
+8. Abrir otra compra y, en una ventana privada (o en otro navegador), entrar como
+   `demo.admin` y **Avanzar un día**. Volver a la pantalla de pago y recargar: debe aparecer el aviso de que la
+   pizarra cambió, y al confirmar se cobra el precio congelado.
+9. Abrir otra compra y esperar 5 minutos sin hacer nada: la página se recarga sola
+   y la compra figura como **Vencida**, sin cobro.
+10. **Vender** la mitad de los dólares. Verificar que los guaraníes recibidos
    correspondan al precio de **compra**, que es menor.
-7. Volver a **Mi billetera** y revisar *Movimientos recientes*: tienen que estar la
-   carga, las dos compras (una con tarjeta, otra con saldo) y la venta, cada una con
-   su cotización.
+11. Volver a **Mi billetera** y revisar *Movimientos recientes*: tienen que estar la
+   carga, las compras (con tarjeta, con saldo y con dólares, con su venta de
+   conversión) y la venta, cada una con su cotización.
 
 **Como gestor (`demo.manager`):**
 
-8. Ir a **Divisas**. Editar el euro y bajar su precio de compra. Intentar poner un
+12. Ir a **Divisas**. Editar el euro y bajar su precio de compra. Intentar poner un
    precio de compra **mayor** que el de venta: el formulario debe rechazarlo.
-9. Ir a **Cotizaciones**, elegir el euro: el cambio recién hecho debe aparecer como
+13. Ir a **Cotizaciones**, elegir el euro: el cambio recién hecho debe aparecer como
    el último punto del gráfico, con origen *Carga manual*.
 
 **Como administrador (`demo.admin`):**
 
-10. Ir a **Simulación**. Anotar el día actual, pulsar **Avanzar un día** una vez y
+14. Ir a **Simulación**. Anotar el día actual, pulsar **Avanzar un día** una vez y
     después **Avanzar una semana**: el reloj debe quedar ocho días adelante.
-11. Verificar que cada vez aparezca la tabla de cambios, con variaciones siempre
+15. Verificar que cada vez aparezca la tabla de cambios, con variaciones siempre
     dentro de −5 % a +7 %, y que el precio de compra siga por debajo del de venta.
-12. Ir a **Cotizaciones**: el gráfico debe mostrar los ocho días nuevos.
-13. Ir a **Usuarios**, crear una cuenta de prueba con rol usuario, cambiarle los
+16. Ir a **Cotizaciones**: el gráfico debe mostrar los ocho días nuevos.
+17. Ir a **Usuarios**, crear una cuenta de prueba con rol usuario, cambiarle los
     roles y eliminarla.
+
+**Como cajero (`demo.cajero`):**
+
+18. Ir a **Caja** y abrir la caja con Gs. 10.000.000, 5.000 USD y 5.000 EUR.
+19. Cotizar: el cliente entrega guaraníes y recibe 100 USD (*Monto que recibe el
+   cliente*: 100). Debe abrirse la pestaña de la operación con la cuenta
+   regresiva. Elegir **Efectivo**, cargar `Juan Pérez` y la cédula `4.567.890`, y
+   confirmar. En el comprobante la cédula aparece con puntos; en la caja, los
+   guaraníes subieron y los dólares bajaron 100.
+20. Otra operación: el cliente entrega euros y recibe 50 USD, pagando con
+   **Tarjeta** (`4242 4242 4242 4242`, titular `JUAN PEREZ`, vencimiento `12/30`,
+   código `123`). En el comprobante sólo se ve `Visa •••• 4242`. Los euros de la caja **no** cambian; los
+   dólares bajan.
+21. Cotizar otra operación y pulsar **Cancelar operación**: la caja no cambia.
+22. Intentar cotizar más dólares de los que hay en la caja: el sistema lo rechaza.
+23. **Cerrar caja**: el reporte debe mostrar la apertura, el cierre, el cobro con
+   tarjeta en *Cobros que no entran a la caja* y las dos operaciones. Descargar el
+   CSV y abrirlo.
 
 **Control de permisos:**
 
-14. Con `demo.customer`, escribir `http://localhost/simulation/` en la barra de
-    direcciones: debe responder *Acceso denegado*. Lo mismo con `/currencies/` y
-    `/manage/users/`.
-15. Sin iniciar sesión, abrir `http://localhost/history/`: debe funcionar, porque la
+24. Con `demo.customer`, escribir `http://localhost/simulation/` en la barra de
+    direcciones: debe responder *Acceso denegado*. Lo mismo con `/currencies/`,
+    `/manage/users/` y `/caja/`.
+25. Sin iniciar sesión, abrir `http://localhost/history/`: debe funcionar, porque la
     pizarra es pública.
 
 ---
 
-## 14. Preguntas frecuentes
+## 15. Preguntas frecuentes
 
 **Compré y vendí lo mismo al instante y perdí dinero. ¿Es un error?**
 No. Es el margen de la casa de cambio: se compra al precio de venta (más alto) y se
 vende al precio de compra (más bajo). Funciona igual en una casa de cambio real.
+
+**Mientras pagaba cambió la cotización. ¿Qué precio me cobran?**
+El del momento en que abriste la compra. El precio queda congelado durante los 5
+minutos que tenés para confirmar; si se vence el plazo, la compra nueva ya toma el
+precio actual.
+
+**Se me venció la compra. ¿Me cobraron algo?**
+No. Una compra vencida o cancelada nunca mueve saldo. Volvé a *Comprar y vender* y
+empezá otra.
+
+**Pagué con QR pero no usé ningún banco.**
+Es correcto: el QR es simulado mientras no haya una pasarela de pagos real. Al pulsar
+*Confirmar pago* la compra se da por pagada.
+
+**Soy cajero y no veo la pestaña Caja.**
+Tu cuenta necesita el rol *Cajero*. Un administrador lo asigna desde **Usuarios**;
+después hay que cerrar sesión y volver a entrar para que el cambio se aplique.
+
+**¿El cliente de ventanilla necesita tener cuenta?**
+No. Se lo identifica con nombre y cédula; la operación no toca ninguna billetera.
+
+**Un cliente quiere pagar con tarjeta en la caja. ¿Entra plata a la caja?**
+No. Con tarjeta o QR no entra efectivo; sólo sale lo que se lleva el cliente. Esos
+cobros aparecen aparte en el reporte, para controlarlos contra el POS y el banco.
+
+**¿Por qué el reporte de caja no coincide con lo que conté?**
+El reporte muestra lo que *debería* haber según las operaciones registradas. Por
+ahora el sistema no pide el conteo físico al cerrar; si hay diferencia, anotala
+aparte.
 
 **¿Por qué no puedo cargar saldo?**
 Hace falta al menos una tarjeta registrada. Ir a *Mi billetera* → *Agregar tarjeta*.
@@ -493,5 +696,6 @@ corriendo (`docker compose ps`) y que `http://localhost/static/css/app.css` resp
 
 **¿Funciona en el teléfono?**
 Sí. La barra lateral se pasa arriba como una tira deslizable y las tablas se
-desplazan de costado. La única cosa que necesita JavaScript es la vista previa de
-compra y los atajos de monto; todo lo demás funciona sin él.
+desplazan de costado. Lo único que necesita JavaScript es la vista previa de
+compra, la cuenta regresiva de la pantalla de pago y los atajos de monto; todo lo
+demás funciona sin él.
