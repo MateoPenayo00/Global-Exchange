@@ -1,8 +1,9 @@
-from datetime import date
+from datetime import date, timedelta
 from decimal import ROUND_HALF_UP, Decimal
 
 from django.conf import settings
 from django.db import models
+from django.utils import timezone
 
 # El guaraní paraguayo es la divisa base del sistema: todas las cotizaciones se
 # expresan en guaraníes por unidad de divisa extranjera.
@@ -14,6 +15,10 @@ BASE_CURRENCY_SYMBOL = "Gs."
 PYG_QUANTUM = Decimal("1")  # el guaraní no se fracciona en la práctica.
 CURRENCY_QUANTUM = Decimal("0.000001")
 RATE_QUANTUM = Decimal("0.000001")
+
+# Plazo que tiene el usuario para confirmar el pago de una compra. Pasado ese
+# tiempo la orden vence y la cotización congelada deja de valer.
+PURCHASE_TIMEOUT = timedelta(minutes=5)
 
 
 def quantize_pyg(amount: Decimal) -> Decimal:
@@ -302,3 +307,288 @@ class WalletTransaction(models.Model):
 
     def __str__(self):
         return f"{self.get_kind_display()} · {self.wallet.user} · {self.amount}"
+
+
+class PurchaseOrder(models.Model):
+    """Una compra de divisa en curso, con las cotizaciones congeladas al iniciarla.
+
+    Comprar ya no es un único paso: el formulario de la pizarra crea una orden
+    *pendiente* y lleva al usuario a la pantalla de pago. Al crearla se fijan:
+
+    * ``rate`` — el precio de venta de la divisa comprada, que define cuánta
+      divisa recibe el usuario por ``pyg_amount`` guaraníes.
+    * ``frozen_rates`` — el precio de compra de cada divisa activa (código ->
+      cotización como texto). Se usa si el usuario paga con otra divisa de su
+      billetera: la casa de cambio se la compra a ese precio, por detrás, para
+      cubrir los guaraníes de la compra.
+
+    Si las cotizaciones cambian mientras la orden está abierta (por ejemplo, un
+    administrador adelanta la simulación), la orden conserva los valores del
+    inicio. La orden se cierra al confirmar el pago, al cancelarla o al vencer
+    el plazo de ``PURCHASE_TIMEOUT``.
+    """
+
+    PENDING = "pending"
+    COMPLETED = "completed"
+    CANCELLED = "cancelled"
+    EXPIRED = "expired"
+
+    STATUS_CHOICES = [
+        (PENDING, "Pendiente de pago"),
+        (COMPLETED, "Pagada"),
+        (CANCELLED, "Cancelada"),
+        (EXPIRED, "Vencida"),
+    ]
+
+    PAY_BALANCE = "balance"
+    PAY_CURRENCY = "currency"
+    PAY_CARD = "card"
+    PAY_QR = "qr"
+
+    PAYMENT_KIND_CHOICES = [
+        (PAY_BALANCE, "Saldo en guaraníes"),
+        (PAY_CURRENCY, "Otra divisa de la billetera"),
+        (PAY_CARD, "Tarjeta de crédito"),
+        (PAY_QR, "Código QR"),
+    ]
+
+    wallet = models.ForeignKey(Wallet, on_delete=models.CASCADE, related_name="purchase_orders")
+    currency = models.ForeignKey(Currency, on_delete=models.PROTECT, related_name="purchase_orders")
+    pyg_amount = models.DecimalField(max_digits=18, decimal_places=2)
+    currency_amount = models.DecimalField(max_digits=18, decimal_places=6)
+    rate = models.DecimalField(max_digits=18, decimal_places=6, help_text="Precio de venta congelado.")
+    frozen_rates = models.JSONField(default=dict, blank=True)
+    status = models.CharField(max_length=10, choices=STATUS_CHOICES, default=PENDING)
+    payment_kind = models.CharField(max_length=10, choices=PAYMENT_KIND_CHOICES, blank=True)
+    payment_method = models.ForeignKey(
+        PaymentMethod, on_delete=models.SET_NULL, null=True, blank=True, related_name="purchase_orders"
+    )
+    paid_currency = models.ForeignKey(
+        Currency, on_delete=models.PROTECT, null=True, blank=True, related_name="+"
+    )
+    paid_amount = models.DecimalField(max_digits=18, decimal_places=6, null=True, blank=True)
+    qr_reference = models.CharField(max_length=40, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    expires_at = models.DateTimeField()
+    closed_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        verbose_name = "orden de compra"
+        verbose_name_plural = "órdenes de compra"
+
+    def __str__(self):
+        return f"Compra #{self.pk} · {self.currency.code} · {self.get_status_display()}"
+
+    def save(self, *args, **kwargs):
+        if self.expires_at is None:
+            self.expires_at = timezone.now() + PURCHASE_TIMEOUT
+        super().save(*args, **kwargs)
+
+    @property
+    def is_pending(self) -> bool:
+        return self.status == self.PENDING
+
+    def is_past_deadline(self, now=None) -> bool:
+        return (now or timezone.now()) >= self.expires_at
+
+    def seconds_left(self, now=None) -> int:
+        if not self.is_pending:
+            return 0
+        remaining = (self.expires_at - (now or timezone.now())).total_seconds()
+        return max(0, int(remaining))
+
+    def frozen_buy_rate(self, currency: Currency):
+        """Precio de compra congelado de ``currency``, o ``None`` si no se congeló."""
+        value = self.frozen_rates.get(currency.code)
+        return Decimal(value) if value is not None else None
+
+
+# --- Caja física ----------------------------------------------------------
+
+# En ventanilla se entrega y se recibe efectivo: el guaraní va en unidades enteras
+# y las divisas extranjeras en centavos, no en millonésimas como en la billetera.
+CASH_FOREIGN_QUANTUM = Decimal("0.01")
+
+# La cotización de una operación de caja se congela igual que la de una compra
+# en línea, y con el mismo plazo para confirmarla.
+CASH_QUOTE_TIMEOUT = PURCHASE_TIMEOUT
+
+
+def cash_quantum(currency: "Currency") -> Decimal:
+    """Unidad mínima de efectivo de ``currency``: 1 Gs. o un centavo."""
+    return PYG_QUANTUM if currency.code == BASE_CURRENCY_CODE else CASH_FOREIGN_QUANTUM
+
+
+class CashSession(models.Model):
+    """Un turno de un cajero en la caja física, de la apertura al cierre.
+
+    Al abrirla el cajero declara cuánto efectivo tiene de cada divisa
+    (``CashSessionBalance.opening_amount``). Cada operación confirmada mueve
+    ``current_amount`` y, al cerrarla, ese saldo queda guardado como
+    ``closing_amount`` para el reporte. Un cajero tiene a lo sumo una sesión
+    abierta a la vez.
+    """
+
+    OPEN = "open"
+    CLOSED = "closed"
+
+    STATUS_CHOICES = [(OPEN, "Abierta"), (CLOSED, "Cerrada")]
+
+    # SET_NULL + nombre copiado: el reporte de una sesión es un registro contable
+    # y no puede desaparecer si se borra el usuario.
+    cashier = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, related_name="cash_sessions"
+    )
+    cashier_name = models.CharField(max_length=150)
+    status = models.CharField(max_length=8, choices=STATUS_CHOICES, default=OPEN)
+    opened_at = models.DateTimeField(auto_now_add=True)
+    closed_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ["-opened_at"]
+        verbose_name = "sesión de caja"
+        verbose_name_plural = "sesiones de caja"
+        constraints = [
+            models.UniqueConstraint(
+                fields=["cashier"],
+                condition=models.Q(status="open"),
+                name="one_open_cash_session_per_cashier",
+            )
+        ]
+
+    def __str__(self):
+        return f"Caja #{self.pk} · {self.cashier_name} · {self.get_status_display()}"
+
+    @property
+    def is_open(self) -> bool:
+        return self.status == self.OPEN
+
+
+class CashSessionBalance(models.Model):
+    """Efectivo de una divisa en una sesión: al abrir, ahora y al cerrar."""
+
+    session = models.ForeignKey(CashSession, on_delete=models.CASCADE, related_name="balances")
+    currency = models.ForeignKey(Currency, on_delete=models.PROTECT, related_name="+")
+    opening_amount = models.DecimalField(max_digits=18, decimal_places=2, default=Decimal("0"))
+    current_amount = models.DecimalField(max_digits=18, decimal_places=2, default=Decimal("0"))
+    closing_amount = models.DecimalField(max_digits=18, decimal_places=2, null=True, blank=True)
+
+    class Meta:
+        ordering = ["currency__code"]
+        constraints = [
+            models.UniqueConstraint(fields=["session", "currency"], name="unique_cash_balance_per_currency")
+        ]
+        verbose_name = "saldo de caja"
+        verbose_name_plural = "saldos de caja"
+
+    def __str__(self):
+        return f"{self.session}: {self.current_amount} {self.currency.code}"
+
+
+class CashTransaction(models.Model):
+    """Una operación de ventanilla: el cliente entrega una divisa y recibe otra.
+
+    Se valúa siempre pasando por guaraníes, con las mismas reglas que el resto
+    del sistema:
+
+    * lo que **entrega** el cliente se toma al precio de **compra** de esa divisa
+      (``rate_in``; 1 si son guaraníes);
+    * lo que **recibe** se le cobra al precio de **venta** (``rate_out``; 1 si
+      son guaraníes).
+
+    Así una sola regla cubre las tres operaciones: el cliente compra divisa con
+    guaraníes, vende divisa por guaraníes o cambia una divisa por otra.
+
+    Lo que recibe el cliente se entrega siempre en efectivo. Lo que entrega puede
+    pagarlo en efectivo (entra a la caja), con tarjeta o con QR (no entra a la
+    caja). Las cotizaciones se congelan al cotizar, y la operación vence si no se
+    confirma dentro de ``CASH_QUOTE_TIMEOUT``.
+    """
+
+    PENDING = "pending"
+    COMPLETED = "completed"
+    CANCELLED = "cancelled"
+    EXPIRED = "expired"
+
+    STATUS_CHOICES = [
+        (PENDING, "Pendiente"),
+        (COMPLETED, "Realizada"),
+        (CANCELLED, "Cancelada"),
+        (EXPIRED, "Vencida"),
+    ]
+
+    PAY_CASH = "cash"
+    PAY_CARD = "card"
+    PAY_QR = "qr"
+
+    PAYMENT_METHOD_CHOICES = [
+        (PAY_CASH, "Efectivo"),
+        (PAY_CARD, "Tarjeta de crédito"),
+        (PAY_QR, "Código QR"),
+    ]
+
+    session = models.ForeignKey(CashSession, on_delete=models.CASCADE, related_name="transactions")
+    status = models.CharField(max_length=10, choices=STATUS_CHOICES, default=PENDING)
+    currency_in = models.ForeignKey(Currency, on_delete=models.PROTECT, related_name="+")
+    amount_in = models.DecimalField(max_digits=18, decimal_places=2, help_text="Lo que entrega el cliente.")
+    rate_in = models.DecimalField(max_digits=18, decimal_places=6, help_text="Precio de compra congelado.")
+    currency_out = models.ForeignKey(Currency, on_delete=models.PROTECT, related_name="+")
+    amount_out = models.DecimalField(max_digits=18, decimal_places=2, help_text="Lo que recibe el cliente.")
+    rate_out = models.DecimalField(max_digits=18, decimal_places=6, help_text="Precio de venta congelado.")
+    pyg_value = models.DecimalField(max_digits=18, decimal_places=2)
+    payment_method = models.CharField(max_length=8, choices=PAYMENT_METHOD_CHOICES, blank=True)
+    # De la tarjeta se guarda sólo lo necesario para el comprobante: nunca el
+    # número completo ni el código de seguridad.
+    card_brand = models.CharField(max_length=12, choices=PaymentMethod.BRAND_CHOICES, blank=True)
+    card_holder = models.CharField(max_length=80, blank=True)
+    card_last4 = models.CharField(max_length=4, blank=True)
+    qr_reference = models.CharField(max_length=40, blank=True)
+    customer_name = models.CharField(max_length=120, blank=True)
+    customer_document = models.CharField(max_length=12, blank=True, verbose_name="Cédula de identidad")
+    created_at = models.DateTimeField(auto_now_add=True)
+    expires_at = models.DateTimeField()
+    closed_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        verbose_name = "operación de caja"
+        verbose_name_plural = "operaciones de caja"
+
+    def __str__(self):
+        return f"Operación #{self.pk} · {self.description} · {self.get_status_display()}"
+
+    def save(self, *args, **kwargs):
+        if self.expires_at is None:
+            self.expires_at = timezone.now() + CASH_QUOTE_TIMEOUT
+        super().save(*args, **kwargs)
+
+    @property
+    def is_pending(self) -> bool:
+        return self.status == self.PENDING
+
+    @property
+    def description(self) -> str:
+        if self.currency_in.code == BASE_CURRENCY_CODE:
+            return f"El cliente compra {self.currency_out.code}"
+        if self.currency_out.code == BASE_CURRENCY_CODE:
+            return f"El cliente vende {self.currency_in.code}"
+        return f"Cambio {self.currency_in.code} → {self.currency_out.code}"
+
+    @property
+    def cash_in(self) -> Decimal:
+        """Efectivo que entra a la caja con esta operación."""
+        return self.amount_in if self.payment_method == self.PAY_CASH else Decimal("0")
+
+    @property
+    def cash_out(self) -> Decimal:
+        """Efectivo que sale de la caja: lo que recibe el cliente."""
+        return self.amount_out
+
+    def is_past_deadline(self, now=None) -> bool:
+        return (now or timezone.now()) >= self.expires_at
+
+    def seconds_left(self, now=None) -> int:
+        if not self.is_pending:
+            return 0
+        return max(0, int((self.expires_at - (now or timezone.now())).total_seconds()))

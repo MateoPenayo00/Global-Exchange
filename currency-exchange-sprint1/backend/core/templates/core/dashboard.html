@@ -31,6 +31,7 @@
           <a class="btn btn-primary" href="{% url 'trade' %}">Comprar y vender</a>
           <a class="btn btn-secondary" href="{% url 'wallet' %}">Mi billetera</a>
         {% endif %}
+        {% if can_operate_cash %}<a class="btn btn-primary" href="{% url 'cash_desk' %}">Caja</a>{% endif %}
         {% if can_manage_currencies %}<a class="btn btn-secondary" href="{% url 'currency_management' %}">Gestionar divisas</a>{% endif %}
         {% if can_simulate %}<a class="btn btn-accent" href="{% url 'simulation' %}">Simular días</a>{% endif %}
         {% if can_manage_users %}<a class="btn btn-secondary" href="{% url 'admin_users' %}">Usuarios</a>{% endif %}

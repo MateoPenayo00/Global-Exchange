@@ -1,0 +1,44 @@
+{% extends 'core/base.html' %}
+{% load money %}
+{% block title %}Exchange Pro | Reporte de caja #{{ report.session.id }}{% endblock %}
+{% block topbar_title %}Reporte de caja #{{ report.session.id }}{% endblock %}
+{% block topbar_actions %}
+  <button class="btn btn-secondary btn-sm" type="button" onclick="window.print()">Imprimir</button>
+  <a class="btn btn-secondary btn-sm" href="{% url 'cash_session_report_csv' report.session.id %}">Descargar CSV</a>
+  <a class="btn btn-primary btn-sm" href="{% url 'cash_desk' %}">Caja</a>
+{% endblock %}
+{% block content %}
+  <div class="stack-lg cash-report">
+    <section class="card card-raised">
+      <div class="card-head row-between">
+        <h1 class="hexed" style="margin:0">Caja #{{ report.session.id }}</h1>
+        {% if report.session.is_open %}
+          <span class="tag tag-up">Abierta · reporte parcial</span>
+        {% else %}
+          <span class="tag">Cerrada</span>
+        {% endif %}
+      </div>
+      <div class="kpis">
+        <div class="kpi">
+          <span class="kpi-label">Cajero</span>
+          <span class="kpi-value report-kpi">{{ report.session.cashier_name }}</span>
+        </div>
+        <div class="kpi">
+          <span class="kpi-label">Apertura</span>
+          <span class="kpi-value report-kpi">{{ report.session.opened_at|date:"d/m/Y H:i" }}</span>
+        </div>
+        <div class="kpi">
+          <span class="kpi-label">Cierre</span>
+          <span class="kpi-value report-kpi">{{ report.session.closed_at|date:"d/m/Y H:i"|default:"—" }}</span>
+        </div>
+        <div class="kpi kpi-accent">
+          <span class="kpi-label">Operaciones</span>
+          <span class="kpi-value report-kpi">{{ report.transactions|length }}</span>
+          <span class="kpi-note">Gs. {{ report.total_pyg_value|gs }} en total</span>
+        </div>
+      </div>
+    </section>
+
+    {% include 'core/_cash_report_body.html' with printable=False %}
+  </div>
+{% endblock %}

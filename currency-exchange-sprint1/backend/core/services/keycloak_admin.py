@@ -6,7 +6,7 @@ from typing import Any
 import requests
 from django.conf import settings
 
-from core.roles import ALL_ROLES
+from core.roles import ALL_ROLES, ROLE_DESCRIPTIONS
 
 
 class KeycloakAdminError(RuntimeError):
@@ -130,6 +130,29 @@ class KeycloakAdminClient:
     def _realm_role(self, name: str) -> dict[str, Any]:
         return self._request("GET", self._admin_url(f"/roles/{name}")).json()
 
+    def ensure_realm_role(self, name: str) -> dict[str, Any]:
+        """Return the realm role ``name``, creating it first if Keycloak lacks it.
+
+        Keycloak imports ``realm-export.json`` only the first time it starts, so a
+        role added to the app later (like ``cajero``) does not exist in an
+        already-running Keycloak until someone creates it. Creating it on demand
+        here means assigning the role from the *Usuarios* tab just works.
+        """
+        response = self.session.get(self._admin_url(f"/roles/{name}"), headers=self._headers(), timeout=10)
+        if response.status_code == 200:
+            return response.json()
+        if response.status_code != 404:
+            raise KeycloakAdminError(
+                f"Keycloak GET role {name} failed: {response.status_code} {response.text.strip()}"
+            )
+        self._request(
+            "POST",
+            self._admin_url("/roles"),
+            json={"name": name, "description": ROLE_DESCRIPTIONS.get(name, "")},
+            ok=(201, 409),  # 409: someone else created it in the meantime
+        )
+        return self._realm_role(name)
+
     def _user_realm_roles(self, user_id: str) -> list[dict[str, Any]]:
         return self._request(
             "GET", f"{self._users_url()}/{user_id}/role-mappings/realm"
@@ -143,7 +166,7 @@ class KeycloakAdminClient:
         wanted = {r for r in roles if r in ALL_ROLES}
         current = self.get_user_roles(user_id)
 
-        to_add = [self._realm_role(name) for name in wanted - current]
+        to_add = [self.ensure_realm_role(name) for name in wanted - current]
         to_remove = [self._realm_role(name) for name in current - wanted]
 
         url = f"{self._users_url()}/{user_id}/role-mappings/realm"

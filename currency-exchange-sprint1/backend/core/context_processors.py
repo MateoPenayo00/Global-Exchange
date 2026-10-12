@@ -19,6 +19,7 @@ def roles(request):
             "can_manage_currencies": role_lib.is_manager(user),
             "can_simulate": role_lib.is_admin(user),
             "can_trade": role_lib.is_trader(user),
+            "can_operate_cash": role_lib.is_cashier(user),
         }
     )
     return base

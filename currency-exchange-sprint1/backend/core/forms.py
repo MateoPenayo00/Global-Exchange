@@ -2,14 +2,13 @@ from datetime import date
 from decimal import Decimal
 
 from django import forms
+from django.db.models import Q
 
-from .models import BASE_CURRENCY_CODE, Currency, PaymentMethod
+from .models import BASE_CURRENCY_CODE, CashTransaction, Currency, PaymentMethod, cash_quantum
 from .roles import ALL_ROLES, DEFAULT_ROLE, ROLE_LABELS
+from .services import pricing
 
 _ROLE_CHOICES = [(role, ROLE_LABELS[role]) for role in ALL_ROLES]
-
-# Fuente de pago elegible al comprar divisas cuando se usa el saldo ya cargado.
-WALLET_SOURCE = "wallet"
 
 
 def _luhn_is_valid(number: str) -> bool:
@@ -23,6 +22,21 @@ def _luhn_is_valid(number: str) -> bool:
                 digit -= 9
         total += digit
     return total % 10 == 0
+
+
+def _parse_expiry(text: str):
+    """``"07/29"`` o ``"07/2029"`` -> ``(2029, 7)``; ``None`` si no se entiende."""
+    parts = text.replace(" ", "").replace("-", "/").split("/")
+    if len(parts) != 2 or not all(part.isdigit() for part in parts):
+        return None
+    month, year = int(parts[0]), int(parts[1])
+    if len(parts[1]) == 2:
+        year += 2000
+    elif len(parts[1]) != 4:
+        return None
+    if not 1 <= month <= 12:
+        return None
+    return year, month
 
 
 def _detect_brand(number: str) -> str:
@@ -221,42 +235,121 @@ class WalletWithdrawForm(forms.Form):
         self.fields["currency"].queryset = Currency.objects.filter(id__in=held_ids)
 
 
-class CurrencyBuyForm(forms.Form):
-    """Compra de divisa: se paga en guaraníes al precio de **venta** de la divisa."""
+def _amount_widget():
+    # step="any": el navegador no debe rechazar un monto que el script completó
+    # con otra precisión; la que vale la valida el servidor.
+    return forms.NumberInput(attrs={"step": "any", "min": "0", "inputmode": "decimal", "autocomplete": "off"})
 
+
+class LinkedAmountsMixin:
+    """Dos montos vinculados: lo que entrega el cliente y lo que recibe.
+
+    En pantalla el cliente escribe uno y ``static/js/linked-amounts.js`` completa
+    el otro. El campo oculto ``anchor`` dice cuál escribió (``in`` u ``out``) y
+    es el que el servidor respeta; el otro se recalcula con
+    ``services.pricing.convert``. Sin JavaScript no hay ancla: se usa el monto
+    que se haya escrito (si se escribieron los dos, el que recibe el cliente).
+
+    Las subclases definen qué campos son el monto y la divisa de cada lado.
+    """
+
+    amount_in_field = "amount_in"
+    amount_out_field = "amount_out"
+    currency_in_field = "currency_in"
+    currency_out_field = "currency_out"
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # Marcas que busca linked-amounts.js para saber qué campo es cuál.
+        for side, amount, currency in (
+            (pricing.IN, self.amount_in_field, self.currency_in_field),
+            (pricing.OUT, self.amount_out_field, self.currency_out_field),
+        ):
+            self.fields[amount].widget.attrs["data-amount"] = side
+            self.fields[currency].widget.attrs["data-currency"] = side
+            self.fields[currency].widget.attrs["aria-label"] = self.fields[currency].label
+        self.fields["anchor"].widget.attrs["data-anchor"] = True
+
+    def linked_fields(self):
+        """Los campos en el orden en que los dibuja ``_linked_amounts.html``."""
+        return {
+            "amount_in": self[self.amount_in_field],
+            "currency_in": self[self.currency_in_field],
+            "amount_out": self[self.amount_out_field],
+            "currency_out": self[self.currency_out_field],
+            "anchor": self["anchor"],
+        }
+
+    def clean_linked_amounts(self, cleaned):
+        amount_in = cleaned.get(self.amount_in_field)
+        amount_out = cleaned.get(self.amount_out_field)
+        anchor = cleaned.get("anchor")
+        if anchor not in pricing.ANCHORS:
+            anchor = pricing.OUT if amount_out else pricing.IN
+        amount = amount_in if anchor == pricing.IN else amount_out
+        if not amount:
+            raise forms.ValidationError("Escribí cuánto se entrega o cuánto se recibe.")
+        currency_in = cleaned.get(self.currency_in_field)
+        if currency_in is not None and currency_in == cleaned.get(self.currency_out_field):
+            raise forms.ValidationError("Elegí dos divisas distintas.")
+        cleaned["anchor"] = anchor
+        cleaned["amount"] = amount
+        return cleaned
+
+
+class CurrencyBuyForm(LinkedAmountsMixin, forms.Form):
+    """Primer paso de una compra: qué divisa, con cuál se paga y cuánto.
+
+    El usuario escribe cuánto paga o cuánto recibe y el otro monto se completa
+    solo. El medio de pago se confirma después, en la pantalla de pago, donde la
+    cotización queda congelada durante el plazo para confirmar.
+    """
+
+    amount_in_field = "pay_amount"
+    amount_out_field = "receive_amount"
+    currency_in_field = "pay_currency"
+    currency_out_field = "currency"
+
+    pay_amount = forms.DecimalField(
+        label="Monto que pagás",
+        max_digits=18,
+        decimal_places=6,
+        min_value=Decimal("0.000001"),
+        required=False,
+        widget=_amount_widget(),
+    )
+    pay_currency = forms.ModelChoiceField(label="Pagás con", queryset=Currency.objects.none(), empty_label=None)
+    receive_amount = forms.DecimalField(
+        label="Monto que recibís",
+        max_digits=18,
+        decimal_places=6,
+        min_value=Decimal("0.000001"),
+        required=False,
+        widget=_amount_widget(),
+    )
     currency = forms.ModelChoiceField(
         label="Divisa a comprar",
         queryset=Currency.objects.filter(is_active=True).exclude(code=BASE_CURRENCY_CODE),
     )
-    pyg_amount = forms.DecimalField(
-        label="Monto a gastar (Gs.)",
-        max_digits=18,
-        decimal_places=2,
-        min_value=Decimal("1"),
-    )
-    payment_source = forms.ChoiceField(
-        label="Pagar con",
-        choices=[],
-        help_text="Puedes usar el saldo que ya tienes en guaraníes o cargar directamente una tarjeta.",
-    )
+    anchor = forms.CharField(required=False, widget=forms.HiddenInput)
 
     def __init__(self, *args, wallet=None, **kwargs):
         super().__init__(*args, **kwargs)
         self.wallet = wallet
-        self._cards = list(wallet.payment_methods.filter(is_active=True)) if wallet else []
-        balance = wallet.pyg_balance if wallet else Decimal("0")
-        choices = [(WALLET_SOURCE, f"Saldo en guaraníes (Gs. {balance:,.0f})".replace(",", "."))]
-        choices += [(str(card.id), f"{card.label} · {card.get_brand_display()} {card.masked_number}") for card in self._cards]
-        self.fields["payment_source"].choices = choices
+        # Se puede pagar con guaraníes o con cualquier divisa activa que haya en
+        # la billetera (la pantalla de pago la convierte a guaraníes).
+        held_ids = (
+            list(wallet.holdings.filter(amount__gt=0).values_list("currency_id", flat=True)) if wallet else []
+        )
+        self.fields["pay_currency"].queryset = Currency.objects.filter(is_active=True).filter(
+            Q(code=BASE_CURRENCY_CODE) | Q(id__in=held_ids)
+        )
+        if not self.is_bound:
+            base = Currency.objects.filter(code=BASE_CURRENCY_CODE).first()
+            self.initial.setdefault("pay_currency", base.pk if base else None)
 
-    def clean_payment_source(self):
-        value = self.cleaned_data["payment_source"]
-        if value == WALLET_SOURCE:
-            return None
-        card = next((card for card in self._cards if str(card.id) == value), None)
-        if card is None:
-            raise forms.ValidationError("Elige un medio de pago válido.")
-        return card
+    def clean(self):
+        return self.clean_linked_amounts(super().clean())
 
 
 class CurrencySellForm(forms.Form):
@@ -306,3 +399,195 @@ class AdminUserRolesForm(forms.Form):
 
     def clean_roles(self):
         return set(self.cleaned_data["roles"])
+
+
+# --- Caja física ------------------------------------------------------------
+
+
+def _cash_currencies():
+    """Divisas que se manejan en caja: el guaraní primero y después las activas."""
+    currencies = list(Currency.objects.filter(is_active=True))
+    return sorted(currencies, key=lambda c: (c.code != BASE_CURRENCY_CODE, c.code))
+
+
+class CashSessionOpenForm(forms.Form):
+    """Apertura de caja: un campo de efectivo inicial por cada divisa activa."""
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.currencies = _cash_currencies()
+        for currency in self.currencies:
+            quantum = cash_quantum(currency)
+            self.fields[self.field_name(currency)] = forms.DecimalField(
+                label=f"{currency.code} · {currency.name}",
+                max_digits=18,
+                decimal_places=0 if currency.code == BASE_CURRENCY_CODE else 2,
+                min_value=Decimal("0"),
+                initial=Decimal("0"),
+                required=False,
+                widget=forms.NumberInput(attrs={"step": str(quantum), "min": "0", "inputmode": "decimal"}),
+            )
+
+    @staticmethod
+    def field_name(currency) -> str:
+        return f"amount_{currency.code}"
+
+    def currency_fields(self):
+        """Pares (divisa, campo) para dibujar el formulario como una tabla."""
+        return [(currency, self[self.field_name(currency)]) for currency in self.currencies]
+
+    def clean(self):
+        cleaned = super().clean()
+        if not any((cleaned.get(self.field_name(c)) or 0) > 0 for c in self.currencies):
+            raise forms.ValidationError("Declará el efectivo inicial de al menos una divisa.")
+        return cleaned
+
+    def opening_amounts(self) -> dict:
+        return {c: self.cleaned_data.get(self.field_name(c)) or Decimal("0") for c in self.currencies}
+
+
+class CashQuoteForm(LinkedAmountsMixin, forms.Form):
+    """Primer paso de una operación de ventanilla: qué entrega y qué recibe el cliente.
+
+    El cajero escribe uno de los dos montos y el otro se completa solo.
+    """
+
+    amount_in = forms.DecimalField(
+        label="Monto que entrega el cliente",
+        max_digits=18,
+        decimal_places=2,
+        min_value=Decimal("0.01"),
+        required=False,
+        widget=_amount_widget(),
+    )
+    currency_in = forms.ModelChoiceField(label="Divisa que entrega", queryset=Currency.objects.none(), empty_label=None)
+    amount_out = forms.DecimalField(
+        label="Monto que recibe el cliente",
+        max_digits=18,
+        decimal_places=2,
+        min_value=Decimal("0.01"),
+        required=False,
+        widget=_amount_widget(),
+    )
+    currency_out = forms.ModelChoiceField(label="Divisa que recibe", queryset=Currency.objects.none(), empty_label=None)
+    anchor = forms.CharField(required=False, widget=forms.HiddenInput)
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        queryset = Currency.objects.filter(is_active=True)
+        self.fields["currency_in"].queryset = queryset
+        self.fields["currency_out"].queryset = queryset
+        if not self.is_bound:
+            # Lo más común en ventanilla: el cliente paga en guaraníes y se lleva divisa.
+            base = queryset.filter(code=BASE_CURRENCY_CODE).first()
+            foreign = queryset.exclude(code=BASE_CURRENCY_CODE).first()
+            self.initial.setdefault("currency_in", base.pk if base else None)
+            self.initial.setdefault("currency_out", foreign.pk if foreign else None)
+
+    def clean(self):
+        return self.clean_linked_amounts(super().clean())
+
+
+class CashPaymentForm(forms.Form):
+    """Segundo paso: cómo paga el cliente y quién es."""
+
+    payment_method = forms.ChoiceField(
+        label="El cliente paga con",
+        choices=CashTransaction.PAYMENT_METHOD_CHOICES,
+        widget=forms.RadioSelect,
+        initial=CashTransaction.PAY_CASH,
+    )
+    customer_name = forms.CharField(label="Nombre y apellido del cliente", max_length=120)
+    customer_document = forms.CharField(
+        label="Cédula de identidad",
+        max_length=15,
+        widget=forms.TextInput(attrs={"inputmode": "numeric", "placeholder": "1.234.567", "autocomplete": "off"}),
+    )
+    # Datos de la tarjeta: obligatorios sólo si se paga con tarjeta. Del número
+    # y del código de seguridad no se guarda nada (sólo marca y últimos cuatro
+    # dígitos); el código no se vuelve a mostrar si el formulario tiene errores.
+    card_number = forms.CharField(
+        label="Número de tarjeta",
+        max_length=25,
+        required=False,
+        widget=forms.TextInput(
+            attrs={"inputmode": "numeric", "placeholder": "4111 1111 1111 1111", "autocomplete": "off"}
+        ),
+    )
+    card_holder = forms.CharField(
+        label="Nombre del titular (como figura en la tarjeta)",
+        max_length=80,
+        required=False,
+        widget=forms.TextInput(attrs={"autocomplete": "off"}),
+    )
+    card_expiry = forms.CharField(
+        label="Vencimiento (MM/AA)",
+        max_length=7,
+        required=False,
+        widget=forms.TextInput(attrs={"placeholder": "MM/AA", "inputmode": "numeric", "autocomplete": "off"}),
+    )
+    card_cvv = forms.CharField(
+        label="Código de seguridad",
+        max_length=4,
+        required=False,
+        widget=forms.PasswordInput(attrs={"inputmode": "numeric", "placeholder": "•••", "autocomplete": "off"}),
+        help_text="Los 3 dígitos del dorso (4 en el frente si es American Express).",
+    )
+
+    def clean_customer_name(self):
+        name = " ".join(self.cleaned_data["customer_name"].split())
+        if len(name) < 3:
+            raise forms.ValidationError("Escribí el nombre completo del cliente.")
+        return name
+
+    def clean_customer_document(self):
+        raw = self.cleaned_data["customer_document"]
+        digits = "".join(char for char in raw if char.isdigit())
+        if any(not (char.isdigit() or char in ". -") for char in raw):
+            raise forms.ValidationError("La cédula sólo puede tener números (los puntos son opcionales).")
+        if not 5 <= len(digits) <= 9:
+            raise forms.ValidationError("La cédula debe tener entre 5 y 9 dígitos.")
+        return digits
+
+    def clean(self):
+        cleaned = super().clean()
+        card = {"card_brand": "", "card_holder": "", "card_last4": ""}
+        if cleaned.get("payment_method") == CashTransaction.PAY_CARD:
+            card = self._clean_card(cleaned) or card
+        # El número completo y el código de seguridad no salen del formulario.
+        cleaned.pop("card_number", None)
+        cleaned.pop("card_cvv", None)
+        cleaned.pop("card_expiry", None)
+        cleaned.update(card)
+        return cleaned
+
+    def _clean_card(self, cleaned):
+        """Valida los datos de la tarjeta; devuelve lo que se puede guardar o ``None``."""
+        errors = {}
+        digits = "".join(char for char in cleaned.get("card_number", "") if char.isdigit())
+        if not 13 <= len(digits) <= 19:
+            errors["card_number"] = "El número de tarjeta debe tener entre 13 y 19 dígitos."
+        elif not _luhn_is_valid(digits):
+            errors["card_number"] = "El número de tarjeta no es válido (no pasa el dígito verificador)."
+
+        holder = " ".join((cleaned.get("card_holder") or "").split())
+        if len(holder) < 3:
+            errors["card_holder"] = "Escribí el nombre del titular como figura en la tarjeta."
+
+        expiry = _parse_expiry(cleaned.get("card_expiry") or "")
+        if expiry is None:
+            errors["card_expiry"] = "Escribí el vencimiento como MM/AA."
+        elif expiry < (date.today().year, date.today().month):
+            errors["card_expiry"] = "La tarjeta está vencida."
+
+        brand = _detect_brand(digits) if digits else PaymentMethod.OTHER
+        cvv = cleaned.get("card_cvv") or ""
+        cvv_length = 4 if brand == PaymentMethod.AMEX else 3
+        if len(cvv) != cvv_length or not cvv.isdigit():
+            errors["card_cvv"] = f"El código de seguridad tiene {cvv_length} dígitos."
+
+        for field, message in errors.items():
+            self.add_error(field, message)
+        if errors:
+            return None
+        return {"card_brand": brand, "card_holder": holder, "card_last4": digits[-4:]}

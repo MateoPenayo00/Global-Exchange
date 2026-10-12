@@ -1,0 +1,179 @@
+{% extends 'core/base.html' %}
+{% load money static %}
+{% block title %}Exchange Pro | Caja{% endblock %}
+{% block topbar_title %}Caja{% if session %} #{{ session.id }} · abierta{% endif %}{% endblock %}
+{% block topbar_actions %}
+  {% if session %}
+    <a class="btn btn-secondary btn-sm" href="{% url 'cash_session_report' session.id %}">Reporte parcial</a>
+    <a class="btn btn-danger btn-sm" href="{% url 'cash_session_close' %}">Cerrar caja</a>
+  {% endif %}
+{% endblock %}
+{% block content %}
+  <div class="stack-lg">
+
+    {% if not session %}
+      {# ---- Apertura: el cajero declara el efectivo con el que empieza ---- #}
+      <section class="card card-raised" id="abrir">
+        <div class="card-head">
+          <h2 class="hexed">Abrir caja</h2>
+          <p class="muted small" style="margin-top:8px">
+            Contá el efectivo del cajón y declaralo por divisa. Las que no tengas dejalas en cero.
+            Cada operación va a mover estos saldos, y al cerrar se genera el reporte del turno.
+          </p>
+        </div>
+        <form method="post" action="{% url 'cash_session_open' %}">
+          {% csrf_token %}
+          <div class="scroll-x">
+            <table class="cash-open-table">
+              <thead><tr><th>Divisa</th><th class="num">Efectivo inicial</th></tr></thead>
+              <tbody>
+                {% for currency, field in open_form.currency_fields %}
+                  <tr>
+                    <td>
+                      <label class="coin-row" for="{{ field.id_for_label }}">
+                        <span class="coin{% if currency.is_base %} coin-base{% endif %}" aria-hidden="true">{{ currency.code }}</span>
+                        <span class="coin-name">
+                          <span class="coin-code">{{ currency.code }}</span>
+                          <span class="coin-full">{{ currency.name }}</span>
+                        </span>
+                      </label>
+                    </td>
+                    <td class="num">{{ field }}{{ field.errors }}</td>
+                  </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+          {% if open_form.non_field_errors %}
+            <ul class="errorlist">{% for error in open_form.non_field_errors %}<li>{{ error }}</li>{% endfor %}</ul>
+          {% endif %}
+          <div class="btn-group" style="margin-top:16px">
+            <button class="btn btn-primary" type="submit">Abrir caja</button>
+          </div>
+        </form>
+      </section>
+
+    {% else %}
+      {% if pending_tx %}
+        <p class="notice" id="pending-cash-tx">
+          <span>
+            Hay una operación cotizada sin confirmar: {{ pending_tx.description }},
+            {{ pending_tx.amount_in|cash:pending_tx.currency_in }} → {{ pending_tx.amount_out|cash:pending_tx.currency_out }}.
+            Vence en {{ pending_tx.seconds_left|countdown }}.
+            <a href="{% url 'cash_operation' pending_tx.id %}">Continuar con la operación</a>
+          </span>
+        </p>
+      {% endif %}
+
+      {# ---- Efectivo en caja ---- #}
+      <section class="card">
+        <div class="card-head row-between">
+          <h2 class="hexed">Efectivo en caja</h2>
+          <span class="muted small">Abierta el {{ session.opened_at|date:"d/m/Y H:i" }} por {{ session.cashier_name }}</span>
+        </div>
+        <div class="scroll-x">
+          <table>
+            <thead><tr><th>Divisa</th><th class="num">Al abrir</th><th class="num">Ahora</th><th class="num">Diferencia</th></tr></thead>
+            <tbody>
+              {% for balance in balances %}
+                <tr>
+                  <td>
+                    <span class="coin-row">
+                      <span class="coin{% if balance.currency.is_base %} coin-base{% endif %}" aria-hidden="true">{{ balance.currency.code }}</span>
+                      <span class="coin-name">
+                        <span class="coin-code">{{ balance.currency.code }}</span>
+                        <span class="coin-full">{{ balance.currency.name }}</span>
+                      </span>
+                    </span>
+                  </td>
+                  <td class="num muted">{{ balance.opening_amount|cash:balance.currency }}</td>
+                  <td class="num"><strong>{{ balance.current_amount|cash:balance.currency }}</strong></td>
+                  <td class="num">
+                    {% with diff=balance.current_amount|sub:balance.opening_amount %}
+                      {% if diff > 0 %}<span class="delta delta-up">▲ +{{ diff|cash:balance.currency }}</span>
+                      {% elif diff < 0 %}<span class="delta delta-down">▼ {{ diff|cash:balance.currency }}</span>
+                      {% else %}<span class="muted">—</span>{% endif %}
+                    {% endwith %}
+                  </td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      {# ---- Nueva operación: se cotiza acá y se completa en su propia pestaña ---- #}
+      <section class="card card-raised" id="operar">
+        <div class="card-head">
+          <h2 class="hexed">Nueva operación</h2>
+          <p class="muted small" style="margin-top:8px">
+            Elegí qué divisa entrega el cliente y cuál recibe, y escribí uno de los dos montos:
+            el otro se completa solo. Al cotizar se abre la pestaña de la operación, con la cotización congelada durante
+            {{ timeout_minutes }} minutos, donde cargás el medio de pago y los datos del cliente.
+          </p>
+        </div>
+        <form method="post" action="{% url 'cash_quote' %}">
+          {% csrf_token %}
+          {% include 'core/_linked_amounts.html' with form=quote_form rates_id="cash-rates" %}
+          <div class="btn-group" style="margin-top:16px">
+            <button class="btn btn-primary" type="submit">Cotizar operación</button>
+          </div>
+        </form>
+        {{ rate_table|json_script:"cash-rates" }}
+        <script src="{% static 'js/linked-amounts.js' %}"></script>
+      </section>
+
+      {# ---- Operaciones del turno ---- #}
+      <section class="card">
+        <div class="card-head row-between">
+          <h2 class="hexed">Operaciones de esta sesión</h2>
+          <span class="muted small">{{ done_transactions|length }} realizada{{ done_transactions|length|pluralize }}</span>
+        </div>
+        {% if done_transactions %}
+          {% include 'core/_cash_transactions_table.html' with transactions=done_transactions %}
+        {% else %}
+          <p class="muted">Todavía no hay operaciones en esta sesión.</p>
+        {% endif %}
+      </section>
+    {% endif %}
+
+    {# ---- Sesiones anteriores ---- #}
+    {% if history %}
+      <section class="card">
+        <div class="card-head">
+          <h2 class="hexed">{% if show_cashier_column %}Sesiones de caja{% else %}Tus sesiones anteriores{% endif %}</h2>
+        </div>
+        <div class="scroll-x">
+          <table>
+            <thead>
+              <tr>
+                <th>Caja</th>
+                {% if show_cashier_column %}<th>Cajero</th>{% endif %}
+                <th>Apertura</th>
+                <th>Cierre</th>
+                <th>Estado</th>
+                <th class="num">Operaciones</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for past in history %}
+                <tr>
+                  <td>#{{ past.id }}</td>
+                  {% if show_cashier_column %}<td>{{ past.cashier_name }}</td>{% endif %}
+                  <td>{{ past.opened_at|date:"d/m/Y H:i" }}</td>
+                  <td>{{ past.closed_at|date:"d/m/Y H:i"|default:"—" }}</td>
+                  <td>{% if past.is_open %}<span class="tag tag-up">Abierta</span>{% else %}<span class="tag">Cerrada</span>{% endif %}</td>
+                  <td class="num">{{ past.done_count }}</td>
+                  <td class="table-actions">
+                    <a class="btn btn-secondary btn-sm" href="{% url 'cash_session_report' past.id %}">Reporte</a>
+                  </td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </section>
+    {% endif %}
+  </div>
+{% endblock %}
