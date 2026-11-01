@@ -11,6 +11,7 @@ urlpatterns = [
     path("trade/checkout/<int:order_id>/", views.purchase_checkout, name="purchase_checkout"),
     path("trade/checkout/<int:order_id>/confirm/", views.purchase_confirm, name="purchase_confirm"),
     path("trade/checkout/<int:order_id>/cancel/", views.purchase_cancel, name="purchase_cancel"),
+    path("stripe/webhook/", views.stripe_webhook, name="stripe_webhook"),
     path("wallet/", views.wallet_view, name="wallet"),
     path("wallet/deposit/", views.wallet_deposit, name="wallet_deposit"),
     path("wallet/deposit/test/", views.wallet_deposit_test, name="wallet_deposit_test"),
