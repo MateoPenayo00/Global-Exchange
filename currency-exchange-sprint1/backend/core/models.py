@@ -623,3 +623,39 @@ class CashTransaction(models.Model):
         if not self.is_pending:
             return 0
         return max(0, int((self.expires_at - (now or timezone.now())).total_seconds()))
+
+
+# --- Notificaciones -------------------------------------------------------
+
+
+class Notification(models.Model):
+    """Aviso a un cliente de que cambió la cotización de una divisa.
+
+    Guarda las cotizaciones de antes y de después para poder mostrar el cambio
+    sin consultar el historial. ``read_at`` vale ``None`` mientras no se lee.
+    """
+
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="notifications")
+    currency = models.ForeignKey(Currency, on_delete=models.CASCADE, related_name="notifications")
+    previous_buy = models.DecimalField(max_digits=18, decimal_places=6)
+    previous_sell = models.DecimalField(max_digits=18, decimal_places=6)
+    new_buy = models.DecimalField(max_digits=18, decimal_places=6)
+    new_sell = models.DecimalField(max_digits=18, decimal_places=6)
+    created_at = models.DateTimeField(auto_now_add=True)
+    read_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ["-created_at", "-id"]
+        verbose_name = "notificación"
+        verbose_name_plural = "notificaciones"
+
+    def __str__(self):
+        return f"{self.currency.code}: {self.previous_sell} -> {self.new_sell} ({self.user})"
+
+    @property
+    def is_read(self) -> bool:
+        return self.read_at is not None
+
+    @property
+    def went_up(self) -> bool:
+        return self.new_sell > self.previous_sell
