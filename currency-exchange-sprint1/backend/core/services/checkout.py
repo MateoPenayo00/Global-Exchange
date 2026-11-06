@@ -379,6 +379,50 @@ def settle_stripe_payment(order: PurchaseOrder, wallet: Wallet, payment_intent: 
     order.save(update_fields=["stripe_payment_intent"])
 
 
+def deposit(wallet: Wallet, amount: Decimal, card: PaymentMethod, note: str) -> WalletTransaction:
+    """Carga ``amount`` guaraníes al saldo cobrando ``card`` (cobro simulado)."""
+    with transaction.atomic():
+        wallet.pyg_balance += amount
+        wallet.save(update_fields=["pyg_balance", "updated_at"])
+        return WalletTransaction.objects.create(
+            wallet=wallet,
+            kind=WalletTransaction.DEPOSIT,
+            payment_method=card,
+            amount=amount,
+            pyg_amount=amount,
+            note=note,
+        )
+
+
+def sell_currency(wallet: Wallet, currency: Currency, amount: Decimal) -> WalletTransaction:
+    """Vende ``amount`` de ``currency`` al precio de **compra** y acredita los guaraníes.
+
+    La venta no pasa por la pantalla de pago: la casa de cambio paga en el acto,
+    con la cotización de la pizarra. Bloquea la tenencia y la billetera.
+    """
+    with transaction.atomic():
+        holding = wallet.holdings.select_for_update().filter(currency=currency).first()
+        if not holding or holding.amount < amount:
+            raise CheckoutError(f"No tienes suficiente {currency.code} para vender esa cantidad.")
+        rate = currency.buy_rate
+        pyg_amount = quantize_pyg(amount * rate)
+        holding.amount -= amount
+        holding.save(update_fields=["amount"])
+        locked = Wallet.objects.select_for_update().get(pk=wallet.pk)
+        locked.pyg_balance += pyg_amount
+        locked.save(update_fields=["pyg_balance", "updated_at"])
+        wallet.pyg_balance = locked.pyg_balance
+        return WalletTransaction.objects.create(
+            wallet=wallet,
+            kind=WalletTransaction.SELL,
+            currency=currency,
+            amount=amount,
+            pyg_amount=pyg_amount,
+            rate_used=rate,
+            note="Venta de divisa",
+        )
+
+
 def cancel_order(order_id: int, wallet: Wallet) -> PurchaseOrder:
     """Cancela una orden pendiente. Si ya había vencido, queda como vencida."""
     with transaction.atomic():
