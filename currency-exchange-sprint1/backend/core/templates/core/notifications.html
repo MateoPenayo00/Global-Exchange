@@ -1,0 +1,43 @@
+{% extends 'core/base.html' %}
+{% load money %}
+{% block title %}Exchange Pro | Avisos{% endblock %}
+{% block topbar_title %}Avisos de cotización{% endblock %}
+{% block topbar_actions %}
+  {% if unread_notifications %}
+    <form method="post" action="{% url 'notifications' %}">
+      {% csrf_token %}
+      <button class="btn btn-secondary btn-sm" type="submit">Marcar todos como leídos</button>
+    </form>
+  {% endif %}
+{% endblock %}
+{% block content %}
+  <section class="card">
+    {% for notification in notifications %}
+      <div class="card-head row-between" style="margin-bottom:12px">
+        <div>
+          <strong>{{ notification.currency.code }}</strong> · {{ notification.currency.name }}
+          {% if not notification.is_read %}<span class="tag tag-pink">Nuevo</span>{% endif %}
+          {% if notification.went_up %}
+            <span class="tag tag-up">Subió</span>
+          {% else %}
+            <span class="tag tag-down">Bajó</span>
+          {% endif %}
+          <p class="muted small" style="margin:4px 0 0">
+            Compra Gs. {{ notification.previous_buy|rate }} → <strong>Gs. {{ notification.new_buy|rate }}</strong> ·
+            Venta Gs. {{ notification.previous_sell|rate }} → <strong>Gs. {{ notification.new_sell|rate }}</strong>
+            · {{ notification.created_at|date:"d/m/Y H:i" }}
+          </p>
+        </div>
+        {% if not notification.is_read %}
+          <form method="post" action="{% url 'notifications' %}">
+            {% csrf_token %}
+            <input type="hidden" name="id" value="{{ notification.id }}">
+            <button class="btn btn-secondary btn-sm" type="submit">Marcar como leído</button>
+          </form>
+        {% endif %}
+      </div>
+    {% empty %}
+      <p class="muted">Todavía no tenés avisos. Te avisamos cuando cambie la cotización de una divisa.</p>
+    {% endfor %}
+  </section>
+{% endblock %}

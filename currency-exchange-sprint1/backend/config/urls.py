@@ -29,6 +29,7 @@ urlpatterns = [
     path("caja/sesiones/<int:session_id>/", cashier_views.cash_session_report, name="cash_session_report"),
     path("caja/sesiones/<int:session_id>/csv/", cashier_views.cash_session_report_csv, name="cash_session_report_csv"),
     path("history/", views.currency_history, name="currency_history"),
+    path("notifications/", views.notifications, name="notifications"),
     path("currencies/", views.currency_management, name="currency_management"),
     path("currencies/new/", views.currency_create, name="currency_create"),
     path("currencies/<int:currency_id>/edit/", views.currency_edit, name="currency_edit"),

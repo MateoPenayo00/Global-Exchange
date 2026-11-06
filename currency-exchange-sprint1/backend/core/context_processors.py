@@ -1,6 +1,14 @@
-from .models import BASE_CURRENCY_CODE, BASE_CURRENCY_SYMBOL
+from .models import BASE_CURRENCY_CODE, BASE_CURRENCY_SYMBOL, Notification
 from . import roles as role_lib
 from .roles import ROLE_LABELS
+
+
+def unread_notifications(request):
+    """Cantidad de avisos sin leer del usuario, para mostrarla en el menú lateral."""
+    user = getattr(request, "user", None)
+    if user is None or not user.is_authenticated:
+        return {"unread_notifications": 0}
+    return {"unread_notifications": Notification.objects.filter(user=user, read_at__isnull=True).count()}
 
 
 def roles(request):

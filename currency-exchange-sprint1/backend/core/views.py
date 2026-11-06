@@ -48,6 +48,7 @@ from .services.keycloak_admin import KeycloakAdminClient, KeycloakAdminError
 from .services.qr import mock_qr_path
 from .templatetags.money import guarani, units
 from .services.simulation import MAX_DAILY_CHANGE, MIN_DAILY_CHANGE, advance_days
+from .services.notifications import mark_read, notify_rate_change
 
 # Montos fijos de los botones de prueba de un clic, expresados en guaraníes.
 TEST_DEPOSIT_AMOUNT = Decimal("500000.00")
@@ -539,6 +540,25 @@ def purchase_cancel(request, order_id):
     return redirect("trade")
 
 
+# --- Notificaciones por cambio de cotización -----------------------------
+
+
+@role_required(role_lib.USER)
+def notifications(request):
+    """Avisos de cambio de cotización del usuario, del más nuevo al más viejo.
+
+    Un ``POST`` los marca como leídos: uno si trae ``id`` y todos si no lo trae.
+    Sólo se tocan los avisos del propio usuario.
+    """
+    if request.method == "POST":
+        mark_read(request.user, request.POST.get("id"))
+        return redirect("notifications")
+
+    context = _nav_context(request)
+    context["notifications"] = request.user.notifications.select_related("currency")[:100]
+    return render(request, "core/notifications.html", context)
+
+
 # --- Historial de cotizaciones ------------------------------------------
 
 
@@ -627,6 +647,8 @@ def currency_create(request):
 @role_required(role_lib.ADMIN, role_lib.MANAGER)
 def currency_edit(request, currency_id):
     currency = get_object_or_404(Currency, pk=currency_id)
+    # Se guardan las cotizaciones de antes porque form.is_valid() ya modifica ``currency``.
+    previous_rates = (currency.buy_rate, currency.sell_rate)
     if request.method == "POST":
         form = CurrencyForm(request.POST, instance=currency)
         if currency.is_base:
@@ -636,6 +658,7 @@ def currency_edit(request, currency_id):
         if form.is_valid():
             currency = form.save()
             currency.record_rate(on_date=_simulated_today())
+            notify_rate_change(currency, *previous_rates)
             messages.success(request, f"Divisa {currency.code} actualizada.")
             return redirect("currency_management")
     else:
@@ -712,6 +735,9 @@ def _advance(request, days):
         return redirect("simulation")
 
     state, changes = advance_days(days)
+    # Un aviso por divisa con el cambio neto, aunque se hayan adelantado varios días.
+    for change in changes:
+        notify_rate_change(change.currency, change.previous_buy, change.previous_sell)
     # Se guarda un resumen en la sesión para mostrarlo después del redirect.
     request.session["last_simulation_changes"] = [
         {
