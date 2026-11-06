@@ -12,6 +12,10 @@ Documentos hermanos:
 |-----------|----------------|
 | `MANUAL_DE_USUARIO.md` | Cómo usar cada pantalla del sitio, con los usuarios de prueba. |
 | `SECRETOS_Y_CONFIGURACION.md` | Qué secretos existen, qué protege cada uno y cómo cambiarlos. |
+| `DESPLIEGUE.md` | El script de despliegue automático y los ambientes de desarrollo y producción. |
+| `FACTURACION_ELECTRONICA.md` | La integración con Factura Segura: qué se factura, flujo, estados y configuración. |
+| `STRIPE.md` | El pago con tarjeta por Stripe Checkout y su webhook. |
+| `SPHINX.md` | Cómo generar la documentación del código a partir de los docstrings. |
 | `COLABORACION_CON_IA.md` | Cómo se usó asistencia de IA en el proyecto, qué aportó y dónde se equivocó. |
 
 ---
@@ -28,18 +32,25 @@ Exchange Pro simula una casa de cambio:
 - Un usuario registra **tarjetas de crédito** en su billetera, carga saldo en
   guaraníes con ellas, compra divisas, las vende de vuelta y las retira. Cada compra
   pasa por una **pantalla de pago** donde el precio queda congelado durante 5
-  minutos y se paga con el saldo, con otra divisa de la billetera, con una tarjeta o
-  con un código QR (simulado).
+  minutos y se paga con el saldo, con otra divisa de la billetera, con una tarjeta
+  registrada (cobro simulado), con **Stripe** (cobro real en modo de prueba, confirmado
+  por webhook) o con un código QR (simulado).
 - Un **cajero** atiende clientes en una ventanilla física: abre una sesión de caja
   declarando el efectivo inicial de cada divisa, registra cada operación con el
   nombre y la cédula del cliente (cobrando en efectivo, tarjeta o QR), la caja se
   actualiza sola, y al cerrar se genera un reporte con el estado inicial, el final y
   todas las operaciones.
 - Cualquiera puede consultar el **historial de cotizaciones** de cada divisa, en
-  tabla y en gráfico.
+  tabla y en gráfico. Cada vez que una cotización cambia, los clientes reciben un
+  **aviso** en la pestaña *Avisos*.
+- Una compra pagada o una operación de caja en la que el cliente se lleva divisa se
+  puede **facturar electrónicamente** a través de Factura Segura (ambiente TEST del
+  SIFEN), con descarga del KuDE en PDF y del XML firmado.
 - Un administrador puede **adelantar un día** el reloj del sistema: cada divisa
   activa varía entre −5 % y +7 %, lo que permite ver el comportamiento de las
-  cotizaciones a lo largo del tiempo sin esperar días reales.
+  cotizaciones a lo largo del tiempo sin esperar días reales, y ejecutar una
+  **simulación completa de transacciones**: todo el ciclo de las operaciones en línea
+  y en caja, con todos los medios de pago y las facturas.
 
 La identidad (login, registro, roles) no la maneja la aplicación: la maneja
 Keycloak. Django sólo consume esa identidad.
@@ -60,7 +71,10 @@ Keycloak. Django sólo consume esa identidad.
 | Proxy inverso | Nginx | 1.27-alpine | Única puerta de entrada: enruta al navegador hacia Django o Keycloak. |
 | Cliente HTTP | requests | 2.32.3 | Llamadas de Django al Admin API de Keycloak. |
 | Variables de entorno | python-dotenv | 1.0.1 | Carga de configuración desde `.env`. |
-| Orquestación | Docker Compose | — | Levanta los cinco servicios con un comando. |
+| Pagos con tarjeta | stripe (Python) | 11.x–12.x | Stripe Checkout y verificación de la firma del webhook. |
+| Facturación electrónica | API ESI de Factura Segura | v01 | Genera, firma y envía al SIFEN las facturas; KuDE y XML. Se llama con `requests`. |
+| Documentación del código | Sphinx | 7.x–8.x | HTML a partir de los docstrings (`backend/docs/`). |
+| Orquestación | Docker Compose | v2 | Levanta los cinco servicios; `docker-compose.dev.yml` y `.prod.yml` ajustan cada ambiente. |
 
 **No se usa ningún framework de frontend ni librería de JavaScript.** La interfaz
 son plantillas de Django con CSS propio, y el gráfico de cotizaciones es un SVG
@@ -71,9 +85,18 @@ que el gráfico se vea incluso con JavaScript deshabilitado.
 
 ```
 Navegador  ──►  Nginx :80  ──┬──►  web (Gunicorn + Django) :8000  ──►  db (PostgreSQL)
+                             │            │
+                             │            ├──►  Stripe (sesión de pago, reembolsos)
+                             │            └──►  Factura Segura (API ESI)  ──►  SIFEN
                              │
                              └──►  keycloak :8080  ──►  keycloak-db (PostgreSQL)
+
+Stripe  ──►  Nginx  ──►  web  POST /stripe/webhook/   (aviso de pago, con firma)
 ```
+
+Los dos servicios externos son opcionales: sin `STRIPE_SECRET_KEY` no se ofrece el
+pago con Stripe, y sin `FACTURA_SEGURA_TOKEN` las facturas se emiten en modo
+simulado.
 
 Nginx enruta por prefijo: `/realms/`, `/admin/`, `/resources/`, `/js/` y
 `/.well-known/` van a Keycloak; todo lo demás (incluido `/oidc/`) va a Django.
@@ -102,16 +125,25 @@ cada petición el host público real, de modo que el login funciona tanto por
 
 ```
 Global-Exchange/
+├── .gitignore                      ← excluye las credenciales de servicios externos
 ├── Documentacion/                  ← toda la documentación del proyecto
 │   ├── DOCUMENTACION_TECNICA.md    ← este documento
 │   ├── MANUAL_DE_USUARIO.md
 │   ├── SECRETOS_Y_CONFIGURACION.md
+│   ├── DESPLIEGUE.md
+│   ├── FACTURACION_ELECTRONICA.md
+│   ├── STRIPE.md
+│   ├── SPHINX.md
 │   ├── COLABORACION_CON_IA.md
 │   └── sprint1_guide.md / .pdf     ← enunciado de la cátedra
 ├── Jira.csv                        ← export del tablero SCRUM
+├── Jira_Sprint6_planificacion.csv  ← historias del Sprint 6, para importar en Jira
 ├── LICENSE
 └── currency-exchange-sprint1/
     ├── docker-compose.yml          ← definición de los cinco servicios
+    ├── docker-compose.dev.yml      ← ambiente de desarrollo: código montado y recarga
+    ├── docker-compose.prod.yml     ← ambiente de producción: sin DEBUG, Keycloak en modo producción
+    ├── scripts/deploy.sh           ← despliegue automático (ver DESPLIEGUE.md)
     ├── .env                        ← valores reales (NO se versiona)
     ├── .env.example                ← plantilla de variables
     ├── nginx/default.conf          ← reglas del proxy inverso
@@ -122,9 +154,11 @@ Global-Exchange/
     └── backend/
         ├── Dockerfile
         ├── requirements.txt
+        ├── requirements-docs.txt   ← Sphinx, sólo para generar la documentación
         ├── manage.py
+        ├── docs/                   ← fuentes de Sphinx (conf.py y un .rst por área)
         ├── config/
-        │   ├── settings.py         ← configuración de Django y de OIDC
+        │   ├── settings.py         ← configuración de Django, OIDC, Stripe y Factura Segura
         │   ├── urls.py             ← mapa de URLs a vistas
         │   └── wsgi.py / asgi.py
         ├── templates/403.html      ← página de acceso denegado
@@ -138,20 +172,31 @@ Global-Exchange/
             ├── models.py           ← modelo de datos
             ├── views.py            ← una función por pantalla o acción
             ├── cashier_views.py    ← las pantallas de la pestaña Caja
+            ├── invoice_views.py    ← las pantallas de la pestaña Facturas
             ├── forms.py            ← validación de cada formulario
             ├── roles.py            ← fuente de verdad de los roles
             ├── backends.py         ← login OIDC contra Keycloak
             ├── middleware.py       ← detección del host público
-            ├── context_processors.py ← datos del menú en todas las páginas
+            ├── context_processors.py ← datos del menú y avisos sin leer en todas las páginas
             ├── admin.py            ← panel /django-admin/
-            ├── tests.py            ← 207 pruebas unitarias
+            ├── tests.py            ← 207 pruebas del núcleo
+            ├── tests_stripe.py     ← 14 pruebas del pago con Stripe
+            ├── tests_notifications.py ← 14 pruebas de los avisos
+            ├── tests_invoicing.py  ← 60 pruebas de la facturación electrónica
+            ├── tests_demo.py       ← 19 pruebas de la simulación completa de transacciones
             ├── migrations/         ← evolución del esquema
+            ├── management/commands/ ← poblar_demo, factura_segura_token, actualizar_facturas
             ├── templatetags/money.py ← formato de montos
             ├── services/
             │   ├── keycloak_admin.py ← cliente del Admin API de Keycloak
             │   ├── simulation.py     ← lógica de "avanzar un día"
+            │   ├── demo.py           ← simulación completa de transacciones
             │   ├── charts.py         ← cálculo del gráfico de historial
-            │   ├── checkout.py       ← órdenes de compra: abrir, pagar, cancelar, vencer
+            │   ├── checkout.py       ← órdenes de compra, carga de saldo y venta
+            │   ├── stripe_payments.py ← sesión de Stripe Checkout y webhook
+            │   ├── notifications.py  ← avisos por cambio de cotización
+            │   ├── invoicing.py      ← facturación: qué se factura, numeración, estados
+            │   ├── factura_segura.py ← cliente del API ESI, cálculo SIFEN y CDC
             │   ├── cashier.py        ← caja física: sesiones, operaciones y reporte
             │   ├── pricing.py        ← conversión con dos montos vinculados (en línea y caja)
             │   └── qr.py             ← dibujo del QR de pago simulado
@@ -259,14 +304,45 @@ pizarra:
 | `rate` | decimal 18,6 | **Precio de venta congelado** al abrir la orden. |
 | `frozen_rates` | JSON | **Precio de compra congelado** de cada divisa activa (`{"USD": "7190.000000", …}`), para pagar con otra divisa. |
 | `status` | texto | `pending`, `completed`, `cancelled` o `expired`. |
-| `payment_kind` | texto | `balance`, `currency`, `card` o `qr`; vacío hasta pagar. |
+| `payment_kind` | texto | `balance`, `currency`, `card`, `qr` o `stripe`; vacío hasta pagar. |
 | `payment_method` | FK opcional | La tarjeta, si se pagó con tarjeta. |
 | `paid_currency`, `paid_amount` | FK / decimal | Sólo al pagar con otra divisa: cuál y cuánto se debitó. |
 | `qr_reference` | texto | Referencia aleatoria del QR simulado (`GEX-XXXXXXXXXX`). |
+| `stripe_session_id`, `stripe_payment_intent` | texto | Sesión de Stripe Checkout abierta para pagarla y, una vez cobrada, el PaymentIntent (para reembolsar o auditar). |
 | `created_at`, `expires_at`, `closed_at` | fecha y hora | Apertura, vencimiento (apertura + `PURCHASE_TIMEOUT`, 5 minutos) y cierre. |
 
 `seconds_left()` devuelve los segundos que quedan para pagar (nunca negativo) y
 `frozen_buy_rate(currency)` el precio de compra congelado de una divisa.
+
+### `StripeEvent` — avisos de Stripe ya procesados
+
+Stripe reenvía un aviso si no recibe un 200 a tiempo, así que el mismo evento puede
+llegar varias veces. Cada `event_id` (único) se guarda con su `event_type`, la orden
+y cómo terminó (`outcome`: `completed`, `refunded`, `duplicate`, …). Es lo que hace
+idempotente al webhook: un reenvío no acredita dos veces.
+
+### `Notification` — aviso de cambio de cotización
+
+Un aviso por cliente (usuario con rol `user`) y por cambio de una divisa:
+`previous_buy`/`previous_sell` y `new_buy`/`new_sell` (para mostrar el cambio sin
+consultar el historial), `created_at` y `read_at` (nulo mientras no se lee).
+`went_up` compara los precios de venta.
+
+### `Invoice` — factura electrónica
+
+Apunta a **exactamente una** operación: `purchase_order` o `cash_transaction`
+(`OneToOne`, `PROTECT`; la restricción `invoice_has_exactly_one_operation` lo
+garantiza en la base). Guarda el número (`establishment`, `expedition_point`,
+`number` de siete dígitos y `stamp`), una copia del receptor (`customer_kind`
+contribuyente o no, `customer_name`, `customer_ruc` + `customer_dv` o
+`customer_document`, `customer_email`), `description`, `total` en guaraníes,
+`issued_at`, el `cdc` de 44 dígitos, el `status` (ver
+`FACTURACION_ELECTRONICA.md`), el estado y el detalle del SIFEN, y el JSON enviado
+y la última respuesta (`request_payload`, `response_payload`) para auditar.
+
+`is_simulated` marca las facturas que nunca salieron de la aplicación. La restricción
+`unique_invoice_number` cubre `(is_simulated, establishment, expedition_point,
+number)`: las simuladas tienen su propia numeración y no consumen el rango real.
 
 ### `CashSession`, `CashSessionBalance` y `CashTransaction` — caja física
 
@@ -301,7 +377,8 @@ millonésimas.
 `WalletHolding`, `WalletTransaction`, `PurchaseOrder`, `CashSessionBalance` y
 `CashTransaction` apuntan a `Currency` con
 `on_delete=PROTECT`: no se puede borrar una divisa con la que alguien operó o intentó
-operar. La vista de borrado atrapa
+operar. Del mismo modo, `Invoice` protege la compra o la operación de caja que
+factura: un registro fiscal no puede quedar huérfano. La vista de borrado atrapa
 el `ProtectedError` y muestra un mensaje claro en lugar de un error 500.
 
 ### Migraciones
@@ -315,6 +392,9 @@ el `ProtectedError` y muestra un mensaje claro en lugar de un error 500.
 | `0005_purchase_order` | Crea `PurchaseOrder` para la pantalla de pago. |
 | `0006_cash_desk` | Crea `CashSession`, `CashSessionBalance` y `CashTransaction` para la caja física. |
 | `0007_cash_card_details` | Agrega `card_brand` y `card_holder` a `CashTransaction`. |
+| `0008_stripe_payments` | Agrega `stripe_session_id` y `stripe_payment_intent` a `PurchaseOrder`, el medio `stripe` y crea `StripeEvent`. |
+| `0009_notification` | Crea `Notification`. |
+| `0010_invoice` | Crea `Invoice` con sus dos restricciones. |
 
 `0004` hace la transición de dólar a guaraní sin perder nada:
 
@@ -432,6 +512,8 @@ más reciente primero y calcula la variación porcentual del período con
 | `/trade/checkout/<id>/` | `purchase_checkout` | Pantalla de pago de una orden, o su estado final si ya se cerró. Acepta `?pay=<clave>` para preseleccionar un medio de pago. |
 | `POST /trade/checkout/<id>/confirm/` | `purchase_confirm` | Cobra la orden con el medio de pago elegido (`payment_source`). |
 | `POST /trade/checkout/<id>/cancel/` | `purchase_cancel` | Cancela la orden sin mover saldo. |
+| `/trade/checkout/<id>/factura/` | `invoice_views.order_invoice` | Solicitar la factura de una compra pagada (ver *Facturas*). |
+| `POST /stripe/webhook/` | `stripe_webhook` | Aviso de Stripe. Sin sesión ni CSRF: lo autentica la firma `Stripe-Signature`. 400 si la firma no es válida, 503 si Stripe no está configurado. |
 
 Las tres rutas de pago responden 404 si la orden es de otra billetera, y las dos de
 acción no hacen nada ante un `GET` (redirigen a la pantalla de pago).
@@ -445,8 +527,9 @@ errores de uno no borran lo escrito en el otro.
   `pyg_amount / sell_rate` redondeando hacia abajo (`ROUND_DOWN`), para no regalar
   fracciones, y rechaza montos tan bajos que no alcancen para comprar ni una
   millonésima de unidad.
-- **`_process_sell()`** — aplica el **precio de compra**, descuenta la tenencia y
-  acredita guaraníes en el saldo.
+- **Vender** — `_process_sell()` llama a `checkout.sell_currency()`, que aplica el
+  **precio de compra**, descuenta la tenencia y acredita guaraníes en el saldo, con la
+  tenencia y la billetera bloqueadas.
 
 #### La pantalla de pago (`services/checkout.py`)
 
@@ -463,6 +546,7 @@ errores de uno no borran lo escrito en el otro.
    | `balance` | Saldo en guaraníes. | El saldo no cubre `pyg_amount`. |
    | `currency:<id>` | Otra divisa de la billetera. No se ofrece la misma divisa que se compra, ni una que estaba inactiva al abrir la orden. | La tenencia no cubre lo necesario. |
    | `card:<id>` | Una tarjeta registrada (cobro simulado). | La tarjeta está vencida. |
+   | `stripe` | Tarjeta por Stripe Checkout. | Sólo se ofrece si hay `STRIPE_SECRET_KEY`. |
    | `qr` | Código QR (simulado). | Siempre disponible. |
 
    Los medios que no alcanzan se muestran deshabilitados con el motivo, en lugar de
@@ -475,6 +559,16 @@ errores de uno no borran lo escrito en el otro.
    **congeladas**, no con las de la pizarra.
 4. **Cancelar — `cancel_order()`.** Cierra la orden sin tocar saldos. Si ya había
    vencido la registra como `expired`.
+
+**Pagar con Stripe.** Es el único medio que no se confirma en `confirm_order()` (que
+lo rechaza a propósito): `purchase_confirm` crea la sesión de Checkout por el monto en
+guaraníes (`stripe_payments.create_checkout_session`) y redirige a Stripe. Volver a
+la pantalla de pago **no confirma nada**: cuando Stripe cobra, llama al webhook, que
+verifica la firma, registra el `StripeEvent` y llama a
+`checkout.settle_stripe_payment()`, que mueve los saldos igual que cualquier otro
+medio. Si el aviso llega cuando la orden ya no se puede cobrar (vencida pasado un
+margen de 2 minutos, cancelada o pagada por otro medio), el cobro se reembolsa
+automáticamente. Detalle y prueba local con `stripe listen` en `STRIPE.md`.
 
 **Pagar con otra divisa.** La casa de cambio le compra al usuario esa divisa al
 precio de compra congelado y con esos guaraníes cubre la compra. La cantidad a
@@ -635,6 +729,33 @@ que necesita Excel en español para abrirlo con columnas y acentos correctos.
 pago, marcados con `data-show-for`). Comprobantes y reportes tienen estilos de
 impresión (`@media print`) que ocultan la navegación y los botones.
 
+### Avisos — rol `user`
+
+| URL | Función | Qué hace |
+|-----|---------|----------|
+| `/notifications/` | `notifications` | Los avisos del usuario, del más nuevo al más viejo (100 como máximo). Un `POST` con `id` marca uno como leído; sin `id`, todos. |
+
+`services/notifications.py`: `notify_rate_change(currency, previous_buy,
+previous_sell)` crea un aviso por cliente si la cotización cambió de verdad (no para
+el guaraní, una divisa inactiva o un guardado sin cambios). La llaman la edición de
+una divisa y la simulación; al adelantar una semana se avisa **una vez por divisa**
+con el cambio neto, no siete. `mark_read()` sólo toca avisos del usuario indicado. El
+contador de no leídos del menú lo aporta `context_processors.unread_notifications`.
+
+### Facturas — roles `user`, `cajero` y `admin`
+
+| URL | Función | Qué hace |
+|-----|---------|----------|
+| `/facturas/` | `invoice_list` | Listado filtrable por estado: el usuario ve las de sus compras, el cajero las de sus sesiones, el admin todas. |
+| `/facturas/<id>/` | `invoice_detail` | La factura con la estructura del KuDE, su estado en el SIFEN y las acciones. Si está en proceso, consulta el estado al abrirla. |
+| `/caja/operaciones/<id>/factura/` | `cash_invoice` | Emitir la factura de una operación de caja. |
+| `POST /facturas/<id>/estado/` · `/reintentar/` · `/cancelar/` | `invoice_refresh` · `invoice_retry` · `invoice_cancel` | Consultar el SIFEN, reenviar con el mismo número, pedir la cancelación (sólo admin). |
+| `/facturas/<id>/kude/` · `/xml/` | `invoice_kude` · `invoice_xml` | Descargar el PDF y el XML firmado desde Factura Segura. |
+
+Una factura ajena responde 404. La lógica está en `services/invoicing.py` y el cliente
+del API en `services/factura_segura.py`; el flujo completo, los estados del SIFEN, los
+códigos de medio de pago y la configuración están en `FACTURACION_ELECTRONICA.md`.
+
 ### Gestión de divisas — roles `admin` y `manager`
 
 | URL | Función | Qué hace |
@@ -654,6 +775,8 @@ simulación.
 |-----|---------|----------|
 | `/simulation/` | `simulation_panel` | Muestra el día simulado, los días acumulados, las cotizaciones vigentes y el resumen del último avance. |
 | `POST /simulation/advance-day/` | `simulation_advance_day` | Adelanta un día. |
+| `POST /simulation/advance-week/` | `simulation_advance_week` | Adelanta siete días de una vez. |
+| `POST /simulation/transactions/` | `simulation_transactions` | Simulación completa de transacciones (ver abajo). |
 
 La lógica está en `services/simulation.py`, separada de la vista para poder probarla
 sin pasar por HTTP:
@@ -682,6 +805,22 @@ Dentro de una única transacción atómica:
 El parámetro `rng` permite inyectar un `random.Random(semilla)` y hacer las pruebas
 deterministas.
 
+#### Simulación completa de transacciones (`services/demo.py`)
+
+`simulate_transactions(rng=None)` recorre todos los caminos de una operación **con los
+mismos servicios que usan las pantallas**, sin escribir en la base por su cuenta:
+
+| Dónde | Usuario | Qué hace |
+|-------|---------|----------|
+| En línea | `demo.customer` | Carga saldo con tarjeta si hace falta; compra pagando con saldo, tarjeta, Stripe, QR y otra divisa de la billetera (`checkout.create_order` + `confirm_order`); la compra con Stripe la confirma `stripe_payments.handle_event()` con un evento `checkout.session.completed` sintético, el mismo código que atiende el webhook; cancela una compra, deja vencer otra, vende divisa (`sell_currency`) y factura cada compra pagada. |
+| Caja | `demo.cajero` | Abre la caja con efectivo, atiende cuatro clientes (compra, venta y cambio entre divisas; efectivo, tarjeta y QR), factura las que corresponden, descarta una cotización y cierra con el reporte, verificando que cuadre. |
+
+Devuelve un `SimulationReport` con cada paso, su resultado y el enlace al comprobante.
+`ensure_demo_users()` crea los cuatro usuarios de demostración con el mismo
+`username` que en Keycloak, de modo que al iniciar sesión el backend OIDC reutiliza
+esas filas. Las facturas se emiten con `SimulatedClient` aunque haya token, para no
+gastar el rango real. Lo usan el botón del panel y el comando `poblar_demo`.
+
 ### Gestión de usuarios — rol `admin`
 
 | URL | Función | Qué hace |
@@ -703,13 +842,25 @@ Es el admin autogenerado de Django, distinto de la pestaña *Usuarios*: opera
 directamente sobre las tablas, no sobre Keycloak. Sólo entran cuentas con
 `is_staff`, es decir, con rol `admin`. `core/admin.py` registra `Currency`,
 `CurrencyRate`, `SimulationState`, `Wallet` (con sus tenencias y tarjetas en línea),
-`PaymentMethod` y `WalletTransaction`.
+`PaymentMethod`, `WalletTransaction`, `PurchaseOrder`, `CashSession` (con sus saldos),
+`CashTransaction` e `Invoice` (sólo lectura: una factura se emite y se cancela desde
+la pestaña *Facturas*).
+
+### Comandos de gestión
+
+| Comando | Qué hace |
+|---------|----------|
+| `python manage.py poblar_demo [--dias N] [--force]` | Usuarios de demostración, N días de cotizaciones simuladas (7 por defecto) y una simulación completa de transacciones. Idempotente: si ya hay datos no hace nada, salvo con `--force`. Lo corre el script de despliegue. |
+| `python manage.py factura_segura_token --email <correo>` | Pide el token del usuario ESI de Factura Segura. |
+| `python manage.py actualizar_facturas` | Consulta en el SIFEN el estado de todas las facturas en proceso (para un cron). |
 
 ### Código que corre en todas las páginas
 
 - **`core.context_processors.roles`** agrega al contexto de cualquier plantilla los
   roles del usuario, los booleanos `can_trade` / `can_manage_currencies` /
-  `can_simulate` / `can_manage_users` y el código y símbolo de la divisa base. Es lo
+  `can_simulate` / `can_manage_users` / `can_operate_cash` / `can_view_invoices` y el
+  código y símbolo de la divisa base. **`unread_notifications`** agrega la cantidad de
+  avisos sin leer. Es lo
   que usa `base.html` para decidir qué pestañas mostrar. Funciona también para
   visitantes anónimos, porque la pestaña de cotizaciones es pública.
 - **`core.middleware.LocalhostAutoDetectMiddleware`** calcula en cada petición el
@@ -855,15 +1006,26 @@ forma fiable combinado con `alias`.
 
 ## 8. Pruebas
 
-207 pruebas unitarias en `backend/core/tests.py`, todas en verde.
+**314 pruebas unitarias, todas en verde**, en cinco archivos:
+
+| Archivo | Pruebas | Qué cubre |
+|---------|---------|-----------|
+| `tests.py` | 207 | El núcleo: roles, divisas, billetera, compra y venta, pantalla de pago, simulación, historial, caja (detalle abajo). |
+| `tests_stripe.py` | 14 | Stripe se ofrece sólo con clave, nunca se confirma desde el navegador, la redirección y la sesión, firma inválida (400), sin secreto (503), sólo `POST`, el evento completa la orden, un reenvío no acredita dos veces, sesión no pagada, eventos ignorados, orden desconocida y el reembolso de un pago tardío. |
+| `tests_notifications.py` | 14 | Un aviso por cliente y ninguno para otros roles, sin aviso si no cambió, para el guaraní o una divisa inactiva; editar avisa, crear no; una semana avisa una vez por divisa; el listado, el contador, marcar uno o todos y que no se pueda marcar uno ajeno. |
+| `tests_invoicing.py` | 60 | Los cálculos del SIFEN reproducen el ejemplo del manual de Factura Segura y su CDC; dígito verificador del RUC; el formulario del receptor; emisión simulada y real (con el API reemplazado), numeración y rango agotado, reintento con el mismo número, timeout sin confirmar, estados del SIFEN, cancelación, caja, pantallas, permisos, descargas y el protocolo HTTP. |
+| `tests_demo.py` | 19 | La simulación completa: ningún paso falla, cada medio de pago completa una compra, Stripe pasa por el manejador del webhook, cancelación y vencimiento, la caja cierra y cuadra, se factura lo que corresponde sin tocar el rango real; el comando `poblar_demo` (idempotente y con `--force`), el botón del panel y el servicio de venta. |
 
 ```bash
 # Con el stack levantado
 docker compose exec web python manage.py test core
 
-# Con detalle de cada prueba
-docker compose exec web python manage.py test core -v 2
+# Un archivo, con detalle de cada prueba
+docker compose exec web python manage.py test core.tests_invoicing -v 2
 ```
+
+**Ninguna prueba sale a internet:** Stripe y Factura Segura se reemplazan por mocks
+(`unittest.mock`) o por el cliente simulado.
 
 Django crea una base de datos temporal (`test_exchange_db`), le aplica todas las
 migraciones y la destruye al terminar: las pruebas nunca tocan los datos reales.
@@ -877,6 +1039,8 @@ que pagar.
 Las compras de las pruebas pasan por el helper `buy(client, currency, monto, medio)`,
 que abre la orden en `/trade/` y la confirma en la pantalla de pago, igual que un
 usuario. Para probar el vencimiento no se espera: se mueve `expires_at` al pasado.
+
+Detalle de `tests.py`:
 
 | Grupo | Nº | Qué cubre |
 |-------|----|-----------|
@@ -911,8 +1075,11 @@ usuario. Para probar el vencimiento no se espera: se mueve `expires_at` al pasad
   un Keycloak levantado y se verifican a mano.
 - La apariencia del SVG en el navegador: se verifica que los puntos se calculen
   bien, no que el gráfico se vea bonito.
+- Los servicios externos de verdad: el cobro en Stripe y la generación de documentos
+  en Factura Segura. Las pruebas verifican lo que la aplicación envía y cómo
+  interpreta las respuestas documentadas.
 
-Esas tres zonas se cubren con el recorrido manual del `MANUAL_DE_USUARIO.md`.
+Esas zonas se cubren con el recorrido manual del `MANUAL_DE_USUARIO.md`.
 
 ---
 
@@ -926,6 +1093,14 @@ Docker Engine, el plugin de Docker Compose y Git.
 
 ```bash
 cd currency-exchange-sprint1
+./scripts/deploy.sh dev      # o: ./scripts/deploy.sh prod
+```
+
+El script prepara `.env`, construye la imagen, levanta los servicios, espera a que
+la aplicación y Keycloak respondan, migra y verifica la base y carga los datos de
+demostración. Ver `DESPLIEGUE.md`. A mano sigue funcionando:
+
+```bash
 cp .env.example .env     # la primera vez; revisar los valores
 docker compose up -d --build
 ```
@@ -955,13 +1130,22 @@ docker compose exec web python manage.py migrate         # migrar a mano
 docker compose exec web python manage.py makemigrations  # tras cambiar models.py
 docker compose exec web python manage.py createsuperuser # admin de Django sin Keycloak
 docker compose exec web python manage.py shell           # consola de Django
+docker compose exec web python manage.py poblar_demo     # datos de demostración
+docker compose exec web python manage.py actualizar_facturas  # estados del SIFEN
 ```
+
+La documentación del código (Sphinx) se genera como indica `SPHINX.md`.
 
 ### Al cambiar código
 
-El `Dockerfile` **copia** el código dentro de la imagen y el servicio `web` no monta
-ningún volumen, así que el contenedor no ve los cambios del disco hasta que se
-reconstruye la imagen:
+**En el ambiente de desarrollo** (`./scripts/deploy.sh dev`) el código de `backend/`
+está montado en el contenedor y gunicorn corre con `--reload`: al guardar un archivo
+Python, el servidor se reinicia solo. Las plantillas se leen en cada petición. Sólo
+hay que reconstruir si cambia `requirements.txt`.
+
+**Con `docker compose up` a secas o en producción** el `Dockerfile` **copia** el
+código dentro de la imagen y no se monta nada, así que el contenedor no ve los
+cambios del disco hasta que se reconstruye la imagen:
 
 ```bash
 docker compose up -d --build web
@@ -982,8 +1166,7 @@ comando de arranque).
 ### Reiniciar los datos desde cero
 
 ```bash
-docker compose down -v        # ¡borra los volúmenes, se pierden todos los datos!
-docker compose up -d --build
+./scripts/deploy.sh dev --reset   # pide confirmación: ¡se pierden todos los datos!
 ```
 
 ### Problemas frecuentes
@@ -1014,7 +1197,7 @@ Modelo y CRUD de divisas, lógica de consulta, roles y permisos (`admin`, `manag
 billetera con compra y retiro. Se cerraron además dos tareas arrastradas del Sprint 1
 (realm de Keycloak y alta/baja de usuarios).
 
-### Sprint 3 — el negocio de verdad (este sprint)
+### Sprint 3 — el negocio de verdad (`v0.3`)
 
 Los objetivos 1 a 6 son los planteados al abrir el sprint; el 7 y el 8 se agregaron
 sobre la marcha, ya terminados los anteriores.
@@ -1030,21 +1213,79 @@ sobre la marcha, ya terminados los anteriores.
 | 7 | Vista previa de la conversión antes de confirmar la compra | Panel con las dos cifras y un gráfico de barras que compara lo pagado con el valor de reventa inmediata, calculado en el navegador a partir de la tabla de cotizaciones que publica la vista. |
 | 8 | Rediseño de la interfaz: paleta morada y rosa, motivo hexagonal, logotipo de cohete, navegación en una barra lateral, botones más legibles y menos clics por acción | Hoja de estilos propia en `backend/static/css/app.css` con tipografías autoalojadas; ver la sección 7. |
 
-Después se agregó la **pantalla de pago** (`/trade/checkout/<id>/`): comprar abre una
-orden con el precio congelado 5 minutos, que se paga con saldo, con otra divisa de la
-billetera (convertida a guaraníes por detrás), con tarjeta o con un QR simulado, y
-que el usuario confirma o cancela. Ver la sección 6.
-
-Más tarde se agregó la **caja física** (pestaña *Caja*, rol `cajero`): sesiones con
-efectivo inicial por divisa, operaciones de ventanilla en su propia pestaña con
-nombre y cédula del cliente y cobro en efectivo, tarjeta o QR, y un reporte al
-cerrar con el estado inicial, el final y todas las operaciones. Ver las secciones 4
-y 6.
-
 Se agregó también la **venta de divisas** (`/trade/`, acción `sell`), que no estaba
 pedida explícitamente pero hacía falta para que la distinción entre precio de compra
 y de venta se pudiera ver de punta a punta: sin ella, el precio de compra nunca
 movía dinero del usuario.
+
+### Sprint 4 — pago, caja y avisos (`v0.4`, más los PR #18 a #20)
+
+Alcance pedido: confirmación de pago (integración con un servicio como Stripe o
+SIPAP), notificaciones por cambio de tasa y módulo de caja.
+
+| Entrega | Qué se hizo |
+|---------|-------------|
+| Pantalla de pago (`v0.4`) | Comprar abre una orden con el precio congelado 5 minutos, que se paga con saldo, con otra divisa de la billetera (convertida a guaraníes por detrás), con tarjeta o con un QR simulado, y que el usuario confirma o cancela. Montos vinculados en la compra y en la caja. |
+| Caja física (`v0.4`) | Pestaña *Caja*, rol `cajero`: sesiones con efectivo inicial por divisa, operaciones de ventanilla con nombre y cédula del cliente y cobro en efectivo, tarjeta o QR, y un reporte al cerrar con el estado inicial, el final y todas las operaciones. |
+| Stripe (PR #18, `FX-20`) | Medio de pago *Tarjeta (Stripe)* con Stripe Checkout en modo de prueba, confirmado por webhook con firma, idempotente y con reembolso de pagos tardíos. |
+| Sphinx (PR #19, `FX-21`) | Documentación del código generada a partir de los docstrings. |
+| Notificaciones (PR #20, `FX-22`) | Avisos a los clientes cuando cambia una cotización, con contador de no leídos. |
+
+Stripe, Sphinx y las notificaciones se integraron a `development` después del tag
+`v0.4`, y llegan a `main` con el release del Sprint 5.
+
+### Sprint 5 — facturación, simulación y despliegue (este sprint)
+
+Alcance pedido (Hito 7): integración de facturación electrónica con visualización y
+descarga de facturas, simulación completa de transacciones y script de despliegue
+automático en los ambientes de desarrollo y producción.
+
+| Rama | Entrega | Cómo se resolvió |
+|------|---------|------------------|
+| `FX-23` | Facturación electrónica | Integración con el API ESI de Factura Segura (ambiente TEST): modelo `Invoice`, cliente HTTP con el protocolo del manual, emisión a pedido desde el comprobante, numeración dentro del rango autorizado, estados del SIFEN, cancelación, pestaña *Facturas* y descarga del KuDE y del XML. Modo simulado sin token. Ver `FACTURACION_ELECTRONICA.md`. |
+| `FX-24` | Simulación completa de transacciones | `services/demo.py`: todo el ciclo en línea y en caja con los servicios reales, desde el botón *Simular transacciones* del panel o con `poblar_demo`. |
+| `FX-25` | Script de despliegue | `scripts/deploy.sh dev\|prod` con `docker-compose.dev.yml` y `docker-compose.prod.yml`: requisitos, configuración, imágenes, servicios, espera activa, migraciones verificadas y población de datos. Ver `DESPLIEGUE.md`. |
+| `FX-26` | Documentación | Este documento, el manual, los secretos, los documentos nuevos, la planificación del Sprint 6 (abajo) y la colaboración con IA. |
+
+**Estado al cierre del sprint.**
+
+| Rama | Story points (estimados) | Estado | Pendiente |
+|------|--------------------------|--------|-----------|
+| `FX-23` Facturación electrónica | 13 | Terminada, con 60 pruebas | Emitir la primera factura real contra Factura Segura TEST: falta el token del usuario ESI (la habilitación no incluye la contraseña). |
+| `FX-24` Simulación completa de transacciones | 5 | Terminada, con 19 pruebas | — |
+| `FX-25` Script de despliegue | 8 | Terminado. Desarrollo probado de punta a punta (incluidas las 314 pruebas dentro del contenedor desplegado); en producción se verificaron por separado Keycloak en modo producción y Django sin `DEBUG` (`check --deploy`) | Una corrida completa de `deploy.sh prod` con secretos propios. |
+| `FX-26` Documentación | 3 | Terminada | Cargar en Jira la planificación del Sprint 6 (ver abajo). |
+
+Release: tag `v0.5` sobre `main` al integrar las cuatro ramas.
+
+### Sprint 6 — planificación
+
+Alcance pedido (Hito 8): reportes de transacciones y ganancias, tablero de control de
+ganancias, gráficos de evolución de tasas, el script de despliegue funcionando en
+producción y el informe final; y en QA, la revisión del flujo crítico de compra y
+venta (acreditación y cancelación) **incluida la terminal de autoservicio**, el
+manejo de roles y el tablero de Jira completo.
+
+Historias propuestas (el archivo `Jira_Sprint6_planificacion.csv` de la raíz las
+trae listas para importar en Jira):
+
+| # | Historia | Prioridad | SP |
+|---|----------|-----------|----|
+| FX-27 | Como **gestor**, quiero un **reporte de transacciones** filtrable por fecha, tipo (compra, venta, caja), divisa y medio de pago, exportable a CSV. | Alta | 5 |
+| FX-28 | Como **administrador**, quiero un **reporte de ganancias**: el margen realizado de cada operación (lo cobrado contra el precio de compra del momento, que ya queda congelado en `frozen_rates` y en `rate_in`/`rate_out`). | Alta | 8 |
+| FX-29 | Como **administrador**, quiero un **tablero de control de ganancias** con totales por día, semana y divisa, y su evolución en un gráfico. | Alta | 8 |
+| FX-30 | Como **cliente**, quiero **comparar la evolución de varias divisas** en el mismo gráfico (hoy el historial muestra una por vez). | Media | 3 |
+| FX-31 | Como **cliente sin cuenta**, quiero operar en una **terminal de autoservicio** que recibe y entrega efectivo (simulado), con su propia caja y su reporte. | Alta | 8 |
+| FX-32 | Como **equipo**, queremos **desplegar producción con HTTPS** y con los secretos de los clientes de Keycloak rotados, y que `deploy.sh prod` corra sin `--insecure`. | Alta | 5 |
+| FX-33 | Como **cliente**, quiero que la factura llegue de verdad al SIFEN: **validar contra Factura Segura TEST** con el token, y emitir **notas de crédito** para devolver una operación facturada. | Media | 5 |
+| FX-34 | Como **PO**, quiero una **revisión QA del flujo crítico** (acreditación, cancelación y vencimiento en línea, caja y terminal), y decidir si una compra pendiente se **cancela cuando cambia la cotización** —lo que pedía el Sprint 3— en lugar de mantener el precio congelado 5 minutos, como hace hoy. | Alta | 3 |
+| FX-35 | Como **equipo**, queremos el **informe final** (máximo 6 páginas, con la estructura de la guía). | Alta | 3 |
+| FX-36 | Como **equipo**, queremos el **tablero de Jira** con todas las historias redactadas, estimadas y asignadas. | Alta | 1 |
+
+Total: 49 puntos. Es bastante más que lo que entregaron los sprints anteriores, así que
+si hay que recortar, salen primero las de prioridad media (FX-30 y FX-33). Las
+asignaciones las decide el equipo en la planificación; la retrospectiva pide
+repartirlas entre los integrantes.
 
 ### Lecciones de la retrospectiva
 
@@ -1070,13 +1311,24 @@ aproximado, mover las tarjetas durante el sprint y no reutilizar códigos `FX-XX
 
 ## 11. Deuda técnica conocida
 
-- **El cobro con tarjeta es simulado.** No hay pasarela de pago: registrar una
-  tarjeta y "cobrarla" sólo deja el movimiento anotado. Es lo adecuado para un
-  proyecto de aprendizaje, pero es lo primero que habría que cambiar para algo real.
+- **Las tarjetas registradas se siguen cobrando de forma simulada.** Stripe cobra de
+  verdad (en modo de prueba), pero el medio *tarjeta registrada* de la billetera, la
+  carga de saldo y la tarjeta en caja sólo dejan el movimiento anotado.
+- **La facturación no se probó todavía contra el ambiente TEST real.** Falta el token
+  del usuario ESI. Las pruebas reproducen el manual de Factura Segura, pero hay tres
+  puntos a confirmar en la primera emisión real: el timbrado, el receptor no
+  contribuyente y la tarjeta de Stripe (ver `FACTURACION_ELECTRONICA.md`, sección 9).
+- **Sin notas de crédito.** Una operación facturada no se puede devolver con su nota
+  de crédito (`iTiDE=5`), aunque el rango ya está habilitado.
+- **No se factura cuando el cliente vende divisa**, porque haría falta una
+  autofactura, que Factura Segura no soporta.
+- **El ítem de la factura es exento de IVA por el total de la operación.** Decisión a
+  validar con el PO; facturar sólo el margen con IVA es un cambio acotado.
 - **El QR de pago es un dibujo.** No codifica ningún estándar de pago ni hay un banco
   que avise cuándo se pagó: el usuario pulsa *Confirmar pago* y se da por cobrado.
   Integrar una pasarela real implica reemplazar `services/qr.py` y confirmar la
-  orden desde el aviso (*webhook*) del banco, no desde el botón.
+  orden desde el aviso (*webhook*) del banco, no desde el botón, como ya se hace con
+  Stripe.
 - **Las órdenes vencidas se marcan de forma perezosa.** Mientras nadie abra la
   pizarra o la pantalla de pago, una orden vencida figura como `pending` en la base
   (aunque nunca se puede cobrar). Si hiciera falta un reporte exacto, alcanza con un
@@ -1110,8 +1362,13 @@ aproximado, mover las tarjetas durante el sprint y no reutilizar códigos `FX-XX
 - **Las pruebas no validan el HTML.** Verifican lo que hace el servidor, no que el
   marcado que produce sea correcto. Así pasó inadvertido un `id` duplicado entre los
   formularios de compra y venta hasta que hubo que escribir código que dependía de él.
-- **Sin paginación.** La billetera muestra los últimos 20 movimientos y el historial
-  el período elegido completo. Con muchos datos ambas vistas van a pesar.
-- **El contenedor no monta el código.** Cada cambio exige reconstruir la imagen o
-  copiar el archivo a mano. Un volumen de desarrollo en `docker-compose.yml`
-  ahorraría ese paso.
+- **Sin paginación.** La billetera muestra los últimos 20 movimientos, los avisos los
+  últimos 100, las facturas las últimas 100 y el historial el período elegido completo.
+  Con muchos datos esas vistas van a pesar.
+- **Producción sin HTTPS.** El ambiente de producción corre por HTTP detrás de nginx.
+  `manage.py check --deploy` lo señala (HSTS, redirección y cookies seguras); hace
+  falta un certificado delante para cerrarlo.
+- **Los secretos de los clientes de Keycloak no se rotan solos.** El script de
+  despliegue genera las contraseñas de las bases y de Django, pero los secretos de
+  `exchange-web` y `exchange-admin-api` vienen del realm export y hay que rotarlos a
+  mano.
