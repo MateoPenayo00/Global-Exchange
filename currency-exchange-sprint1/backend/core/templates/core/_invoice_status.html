@@ -1,0 +1,5 @@
+{# Etiqueta del estado de una factura; espera ``invoice`` en el contexto. #}
+{% if invoice.status == 'approved' %}<span class="tag tag-up">{{ invoice.get_status_display }}</span>
+{% elif invoice.status == 'processing' %}<span class="tag">{{ invoice.get_status_display }}</span>
+{% elif invoice.status == 'unconfirmed' %}<span class="tag tag-pink">{{ invoice.get_status_display }}</span>
+{% else %}<span class="tag tag-down">{{ invoice.get_status_display }}</span>{% endif %}

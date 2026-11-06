@@ -11,6 +11,21 @@ Cotizaciones y conversión
 
 .. automodule:: core.services.pricing
 
+Pago con Stripe
+---------------
+
+.. automodule:: core.services.stripe_payments
+
+Facturación electrónica
+-----------------------
+
+.. automodule:: core.services.invoicing
+
+Cliente de Factura Segura
+-------------------------
+
+.. automodule:: core.services.factura_segura
+
 Caja
 ----
 
@@ -20,6 +35,11 @@ Simulación
 ----------
 
 .. automodule:: core.services.simulation
+
+Notificaciones de cotización
+----------------------------
+
+.. automodule:: core.services.notifications
 
 Gráficos
 --------

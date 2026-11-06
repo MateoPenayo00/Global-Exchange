@@ -1,0 +1,137 @@
+{% extends 'core/base.html' %}
+{% load money %}
+{% block title %}Exchange Pro | Factura {{ invoice.full_number }}{% endblock %}
+{% block topbar_title %}Factura {{ invoice.full_number }}{% endblock %}
+{% block topbar_actions %}
+  <a class="btn btn-secondary btn-sm" href="{% url 'invoice_list' %}">Todas las facturas</a>
+{% endblock %}
+{% block content %}
+  <div class="stack-lg">
+
+    {# ---- Estado en el SIFEN y acciones ---- #}
+    <section class="card no-print">
+      <div class="card-head row-between">
+        <h2 class="hexed">Estado</h2>
+        {% include 'core/_invoice_status.html' %}
+      </div>
+      <dl class="receipt-facts">
+        {% if invoice.sifen_status %}<dt>SIFEN</dt><dd>{{ invoice.sifen_status }}{% if invoice.sifen_detail %} · {{ invoice.sifen_detail }}{% endif %}</dd>{% endif %}
+        {% if invoice.error_message %}<dt>Error</dt><dd class="danger">{{ invoice.error_message }}</dd>{% endif %}
+        {% if invoice.status_checked_at %}<dt>Consultado</dt><dd>{{ invoice.status_checked_at|date:"d/m/Y H:i:s" }}</dd>{% endif %}
+        <dt>Operación</dt>
+        <dd>
+          {% if invoice.purchase_order_id %}
+            <a href="{% url 'purchase_checkout' invoice.purchase_order_id %}">{{ invoice.operation_label }}</a>
+          {% else %}
+            <a href="{% url 'cash_operation' invoice.cash_transaction_id %}">{{ invoice.operation_label }}</a>
+          {% endif %}
+        </dd>
+      </dl>
+      {% if invoice.is_simulated %}
+        <p class="notice" style="margin-top:12px">
+          <span>Factura <strong>simulada</strong>: no se envió a Factura Segura ni al SIFEN y no tiene validez fiscal.
+          Su numeración es aparte y no consume el rango autorizado.</span>
+        </p>
+      {% elif invoice.status == 'processing' %}
+        <p class="muted small" style="margin-top:12px">
+          El SIFEN suele responder en uno o dos minutos. Esta página consulta el estado sola al abrirla; también podés
+          pulsar <strong>Actualizar estado</strong>.
+        </p>
+      {% endif %}
+
+      <div class="btn-group" style="margin-top:16px">
+        <button class="btn btn-secondary" type="button" onclick="window.print()">Imprimir</button>
+        {% if invoice.can_download %}
+          <a class="btn btn-primary" href="{% url 'invoice_kude' invoice.id %}">Descargar KuDE (PDF)</a>
+          <a class="btn btn-secondary" href="{% url 'invoice_xml' invoice.id %}">Descargar XML</a>
+        {% endif %}
+        {% if invoice.cdc and not invoice.is_simulated and not invoice.is_final %}
+          <form method="post" action="{% url 'invoice_refresh' invoice.id %}">
+            {% csrf_token %}
+            <button class="btn btn-secondary" type="submit">Actualizar estado</button>
+          </form>
+        {% endif %}
+        {% if invoice.can_retry %}
+          {% if invoice.status != 'unconfirmed' or is_admin %}
+            <a class="btn btn-accent" href="{% if invoice.purchase_order_id %}{% url 'order_invoice' invoice.purchase_order_id %}{% else %}{% url 'cash_invoice' invoice.cash_transaction_id %}{% endif %}">Corregir y reenviar</a>
+          {% endif %}
+        {% endif %}
+        {% if is_admin and invoice.status == 'approved' %}
+          <form method="post" action="{% url 'invoice_cancel' invoice.id %}"
+                onsubmit="return confirm('¿Solicitar al SIFEN la cancelación de la factura {{ invoice.full_number }}?')">
+            {% csrf_token %}
+            <button class="btn btn-danger" type="submit">Solicitar cancelación</button>
+          </form>
+        {% endif %}
+      </div>
+    </section>
+
+    {# ---- La factura, con la estructura del KuDE ---- #}
+    <section class="card card-raised receipt">
+      <div class="card-head row-between">
+        <div>
+          <h2 class="hexed">{{ emitter.name }}</h2>
+          <p class="muted small" style="margin:4px 0 0">
+            RUC {{ emitter.ruc }}-{{ emitter.dv }} · {{ emitter.address }} · {{ emitter.city }}<br>
+            {% for activity in emitter.activities %}{{ activity.dDesActEco }}{% if not forloop.last %} · {% endif %}{% endfor %}
+          </p>
+        </div>
+        <div style="text-align:right">
+          <strong>FACTURA ELECTRÓNICA</strong><br>
+          <code>{{ invoice.full_number }}</code><br>
+          {% if invoice.stamp %}<span class="muted small">Timbrado {{ invoice.stamp }}</span>{% endif %}
+        </div>
+      </div>
+
+      <dl class="receipt-facts">
+        <dt>Fecha de emisión</dt><dd>{{ invoice.issued_at|date:"d/m/Y H:i:s" }}</dd>
+        <dt>Condición</dt><dd>Contado</dd>
+        <dt>Cliente</dt><dd>{{ invoice.customer_name }}</dd>
+        <dt>{% if invoice.customer_kind == 'taxpayer' %}RUC{% else %}Cédula de identidad{% endif %}</dt>
+        <dd>{% if invoice.customer_kind == 'taxpayer' %}{{ invoice.customer_tax_id }}{% else %}{{ invoice.customer_document|ci }}{% endif %}</dd>
+        <dt>Correo</dt><dd>{{ invoice.customer_email }}</dd>
+        <dt>Medio de pago</dt><dd>{{ payment_label }}</dd>
+      </dl>
+
+      <div class="scroll-x" style="margin-top:16px">
+        <table>
+          <thead>
+            <tr>
+              <th>Cant.</th>
+              <th>Descripción</th>
+              <th class="num">Precio unitario</th>
+              <th class="num">Exentas</th>
+              <th class="num">5 %</th>
+              <th class="num">10 %</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>1</td>
+              <td>{{ invoice.description }}</td>
+              <td class="num">{{ invoice.total|gs }}</td>
+              <td class="num">{{ invoice.total|gs }}</td>
+              <td class="num">0</td>
+              <td class="num">0</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <dl class="receipt-facts" style="margin-top:16px">
+        <dt>Total de la operación</dt><dd><strong>Gs. {{ invoice.total|gs }}</strong></dd>
+        <dt>Liquidación del IVA</dt><dd>5 %: 0 · 10 %: 0 · Total IVA: 0</dd>
+        <dt>CDC</dt><dd>{% if invoice.cdc %}<code>{{ invoice.cdc }}</code>{% else %}<span class="muted">Sin generar</span>{% endif %}</dd>
+      </dl>
+
+      <p class="muted small" style="margin-top:16px">
+        {% if invoice.is_simulated %}
+          Documento simulado, sin validez fiscal.
+        {% else %}
+          Consulte la validez de este documento electrónico con el CDC en https://ekuatia.set.gov.py/consultas.
+          Emitido en el ambiente de prueba de Factura Segura: sin validez fiscal.
+        {% endif %}
+      </p>
+    </section>
+  </div>
+{% endblock %}

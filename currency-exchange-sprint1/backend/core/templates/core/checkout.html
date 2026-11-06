@@ -168,6 +168,13 @@
       {% endif %}
 
       <div class="btn-group">
+        {% if order.status == 'completed' %}
+          {% if order.invoice and not order.invoice.can_retry %}
+            <a class="btn btn-accent" href="{% url 'invoice_detail' order.invoice.id %}">Ver factura {{ order.invoice.full_number }}</a>
+          {% else %}
+            <a class="btn btn-accent" href="{% url 'order_invoice' order.id %}">{% if order.invoice %}Reenviar factura{% else %}Solicitar factura{% endif %}</a>
+          {% endif %}
+        {% endif %}
         <a class="btn btn-primary" href="{% url 'trade' %}?currency={{ order.currency.id }}#comprar">Nueva compra</a>
         <a class="btn btn-secondary" href="{% url 'wallet' %}">Ver billetera</a>
       </div>

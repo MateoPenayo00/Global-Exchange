@@ -196,6 +196,13 @@
 
       <div class="btn-group no-print" style="margin-top:20px">
         {% if tx.status == 'completed' %}<button class="btn btn-secondary" type="button" onclick="window.print()">Imprimir comprobante</button>{% endif %}
+        {% if tx.status == 'completed' and not tx.currency_out.is_base %}
+          {% if tx.invoice and not tx.invoice.can_retry %}
+            <a class="btn btn-accent" href="{% url 'invoice_detail' tx.invoice.id %}">Ver factura {{ tx.invoice.full_number }}</a>
+          {% else %}
+            <a class="btn btn-accent" href="{% url 'cash_invoice' tx.id %}">{% if tx.invoice %}Reenviar factura{% else %}Emitir factura{% endif %}</a>
+          {% endif %}
+        {% endif %}
         {% if tx.session.is_open and can_operate %}
           <a class="btn btn-primary" href="{% url 'cash_desk' %}#operar">Nueva operación</a>
         {% else %}
