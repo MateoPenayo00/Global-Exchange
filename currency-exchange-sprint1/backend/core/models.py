@@ -659,3 +659,140 @@ class Notification(models.Model):
     @property
     def went_up(self) -> bool:
         return self.new_sell > self.previous_sell
+
+
+# --- Facturación electrónica ----------------------------------------------
+
+
+class Invoice(models.Model):
+    """Factura electrónica de una operación, emitida a través de Factura Segura.
+
+    Se factura la **venta de divisas al cliente**: una compra en línea pagada
+    (``purchase_order``) o una operación de caja en la que el cliente recibe
+    divisa extranjera (``cash_transaction``). Cada factura apunta a exactamente
+    una de las dos.
+
+    El número (``number``, siete dígitos) se reserva al crear la factura y no se
+    libera aunque el envío falle: un reintento reutiliza el mismo número, para no
+    gastar el rango autorizado ni arriesgar dos documentos con el mismo número.
+
+    ``is_simulated`` distingue las facturas que nunca salieron de la aplicación
+    (sin token de Factura Segura, o datos de demostración). Tienen su propia
+    numeración, que no consume el rango real.
+    """
+
+    ERROR = "error"
+    UNCONFIRMED = "unconfirmed"
+    PROCESSING = "processing"
+    APPROVED = "approved"
+    REJECTED = "rejected"
+    CANCELLED = "cancelled"
+    VOIDED = "voided"
+
+    STATUS_CHOICES = [
+        (ERROR, "No se pudo generar"),
+        (UNCONFIRMED, "Sin confirmar"),
+        (PROCESSING, "En proceso en el SIFEN"),
+        (APPROVED, "Aprobada"),
+        (REJECTED, "Rechazada por el SIFEN"),
+        (CANCELLED, "Cancelada"),
+        (VOIDED, "Inutilizada"),
+    ]
+
+    # Receptor contribuyente (con RUC) o no contribuyente (con cédula).
+    TAXPAYER = "taxpayer"
+    NON_TAXPAYER = "non_taxpayer"
+    CUSTOMER_KIND_CHOICES = [(TAXPAYER, "Contribuyente (RUC)"), (NON_TAXPAYER, "No contribuyente (cédula)")]
+
+    purchase_order = models.OneToOneField(
+        PurchaseOrder, on_delete=models.PROTECT, null=True, blank=True, related_name="invoice"
+    )
+    cash_transaction = models.OneToOneField(
+        CashTransaction, on_delete=models.PROTECT, null=True, blank=True, related_name="invoice"
+    )
+    requested_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="+"
+    )
+    is_simulated = models.BooleanField(default=False)
+
+    # Numeración: establecimiento, punto de expedición y número del documento.
+    stamp = models.CharField(max_length=8, blank=True, verbose_name="Timbrado")
+    establishment = models.CharField(max_length=3)
+    expedition_point = models.CharField(max_length=3)
+    number = models.CharField(max_length=7)
+
+    # Receptor, copiado al emitir: la factura no cambia si después cambian los datos del usuario.
+    customer_kind = models.CharField(max_length=12, choices=CUSTOMER_KIND_CHOICES)
+    customer_name = models.CharField(max_length=120)
+    customer_ruc = models.CharField(max_length=10, blank=True)
+    customer_dv = models.CharField(max_length=1, blank=True)
+    customer_document = models.CharField(max_length=12, blank=True, verbose_name="Cédula de identidad")
+    customer_email = models.EmailField()
+
+    description = models.CharField(max_length=200)
+    total = models.DecimalField(max_digits=18, decimal_places=0, help_text="Total en guaraníes.")
+    issued_at = models.DateTimeField(help_text="Fecha y hora de emisión que figura en el documento.")
+
+    status = models.CharField(max_length=12, choices=STATUS_CHOICES, default=PROCESSING)
+    cdc = models.CharField(max_length=44, blank=True, verbose_name="CDC")
+    error_message = models.TextField(blank=True)
+    sifen_status = models.CharField(max_length=40, blank=True)
+    sifen_detail = models.TextField(blank=True)
+    status_checked_at = models.DateTimeField(null=True, blank=True)
+    # El JSON enviado y la última respuesta, para auditoría y para depurar rechazos.
+    request_payload = models.JSONField(default=dict, blank=True)
+    response_payload = models.JSONField(default=dict, blank=True)
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        verbose_name = "factura electrónica"
+        verbose_name_plural = "facturas electrónicas"
+        constraints = [
+            models.UniqueConstraint(
+                fields=["is_simulated", "establishment", "expedition_point", "number"],
+                name="unique_invoice_number",
+            ),
+            models.CheckConstraint(
+                condition=(
+                    models.Q(purchase_order__isnull=False, cash_transaction__isnull=True)
+                    | models.Q(purchase_order__isnull=True, cash_transaction__isnull=False)
+                ),
+                name="invoice_has_exactly_one_operation",
+            ),
+        ]
+
+    def __str__(self):
+        return f"Factura {self.full_number} · {self.get_status_display()}"
+
+    @property
+    def full_number(self) -> str:
+        """Número completo como se imprime: ``001-003-0000314``."""
+        return f"{self.establishment}-{self.expedition_point}-{self.number}"
+
+    @property
+    def customer_tax_id(self) -> str:
+        if self.customer_kind == self.TAXPAYER:
+            return f"{self.customer_ruc}-{self.customer_dv}"
+        return self.customer_document
+
+    @property
+    def operation_label(self) -> str:
+        if self.purchase_order_id:
+            return f"Compra en línea #{self.purchase_order_id}"
+        return f"Operación de caja #{self.cash_transaction_id}"
+
+    @property
+    def can_download(self) -> bool:
+        """KuDE y XML existen en Factura Segura sólo para facturas reales ya generadas."""
+        return not self.is_simulated and bool(self.cdc)
+
+    @property
+    def can_retry(self) -> bool:
+        return self.status in (self.ERROR, self.UNCONFIRMED, self.REJECTED)
+
+    @property
+    def is_final(self) -> bool:
+        return self.status in (self.CANCELLED, self.VOIDED)
