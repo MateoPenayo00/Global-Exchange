@@ -21,12 +21,15 @@ Con el proyecto levantado, abrir en el navegador:
 | Consola de administración de Keycloak | `http://localhost/admin/` |
 | Panel interno de Django | `http://localhost/django-admin/` |
 
-Si el proyecto todavía no está corriendo, levantarlo con:
+Si el proyecto todavía no está corriendo, levantarlo con el script de despliegue
+(deja además datos de demostración cargados):
 
 ```bash
 cd currency-exchange-sprint1
-docker compose up -d --build
+./scripts/deploy.sh dev
 ```
+
+Ver `DESPLIEGUE.md` para las opciones y el ambiente de producción.
 
 ---
 
@@ -39,7 +42,7 @@ la misma contraseña.**
 |---------|-----------|-----|-----------------|
 | `demo.admin` | `ChangeMe123!` | Administrador | Todo: operar, gestionar divisas, simular días y gestionar usuarios. |
 | `demo.manager` | `ChangeMe123!` | Gestor | Gestionar divisas y sus precios de compra y venta. |
-| `demo.customer` | `ChangeMe123!` | Usuario | Operar: billetera, tarjetas, comprar, vender y retirar divisas. |
+| `demo.customer` | `ChangeMe123!` | Usuario | Operar: billetera, tarjetas, comprar, vender y retirar divisas, recibir avisos y pedir facturas. |
 | `demo.cajero` | `ChangeMe123!` | Cajero | Atender la caja física: abrir y cerrar caja y registrar operaciones de clientes en ventanilla. |
 
 Correos asociados: `demo.admin@example.com`, `demo.manager@example.com`,
@@ -72,8 +75,8 @@ Dos caminos:
 
 ## 3. El menú
 
-Toda la navegación está en la **barra lateral izquierda**, agrupada en tres bloques:
-*General*, *Operar* y *Administración*. La pestaña en la que estás queda resaltada con
+Toda la navegación está en la **barra lateral izquierda**, agrupada en bloques:
+*General*, *Operar*, *Ventanilla* y *Administración*. La pestaña en la que estás queda resaltada con
 un hexágono rosa. Abajo de todo aparecen tu nombre, tus roles y el cierre de sesión.
 
 En la **barra superior** está el título de la pantalla y, cuando hace falta, el dato
@@ -90,8 +93,9 @@ La barra lateral muestra solamente las pestañas que el rol permite usar:
 | **Inicio** | Todos, incluso sin iniciar sesión. |
 | **Cotizaciones** | Todos, incluso sin iniciar sesión. |
 | **Panel** | Con sesión iniciada. |
-| **Mi billetera** y **Comprar y vender** | Rol usuario. |
+| **Mi billetera**, **Comprar y vender** y **Avisos** | Rol usuario. |
 | **Caja** | Roles cajero y administrador. |
+| **Facturas** | Roles usuario, cajero y administrador. |
 | **Divisas** | Roles gestor y administrador. |
 | **Simulación** | Rol administrador. |
 | **Usuarios** | Rol administrador. |
@@ -293,6 +297,7 @@ divisa, la pantalla de pago se abre con esa divisa ya elegida como medio de pago
   | **Saldo en guaraníes** | Se descuenta del saldo de la billetera. |
   | **Otra divisa de tu billetera** (una opción por cada divisa que tengas) | La casa de cambio te compra esa divisa al precio de compra congelado y con esos guaraníes paga la compra. La opción dice exactamente cuánto se va a debitar. El saldo en guaraníes no se toca. |
   | **Una tarjeta registrada** | Se cobra a la tarjeta (simulado). El saldo no se toca. |
+  | **Tarjeta (Stripe)** | Te lleva a la página de pago de Stripe (modo de prueba). Pagás ahí con la tarjeta y volvés a la pantalla de pago. **Volver no confirma nada:** la compra se acredita cuando Stripe avisa que cobró, en unos segundos; actualizá la página. Si cancelás en Stripe no se cobra nada y podés elegir otro medio. Sólo aparece si el sistema tiene configurada la clave de Stripe. |
   | **Código QR** | Aparece un QR con una referencia y el monto. Se escanea con la app del banco y después se pulsa *Confirmar pago*. **Es simulado:** todavía no hay un banco real detrás, así que no se cobra nada fuera de la aplicación. |
 
   Los medios que no alcanzan (saldo insuficiente, poca cantidad de la divisa, tarjeta
@@ -348,6 +353,12 @@ Los guaraníes se acreditan en el saldo al instante. Si se intenta vender más d
 que se tiene, la operación se rechaza.
 
 Este bloque sólo aparece si hay divisas en la billetera.
+
+### 8.3 Pedir la factura de una compra
+
+Una compra **pagada** se puede facturar. Al abrir la compra (desde el mensaje de
+confirmación, o desde *Facturas*), el comprobante tiene el botón **Solicitar
+factura**. Ver la sección 14.
 
 ---
 
@@ -424,9 +435,31 @@ de venta, por muchos días que se simulen.
 **Para ver el efecto:** pulsar *Avanzar una semana* dos o tres veces y después ir a
 **Cotizaciones**. El gráfico va a mostrar la trayectoria completa.
 
+Cada vez que una divisa cambia de precio (por la simulación o porque un gestor la
+editó), los clientes reciben un **aviso** (sección 13).
+
 > No hay botón para volver atrás: los días avanzan en una sola dirección. Para
 > empezar de cero hay que reiniciar los datos del proyecto (ver
-> `DOCUMENTACION_TECNICA.md`, sección 8).
+> `DOCUMENTACION_TECNICA.md`, sección 9).
+
+### Simulación completa de transacciones
+
+El bloque **Simulación completa de transacciones** tiene el botón **Simular
+transacciones**. Con un clic ejecuta, con los usuarios de demostración y las
+cotizaciones del día, **todo el ciclo de las operaciones**, usando las mismas reglas
+que las pantallas:
+
+- `demo.customer` carga saldo y compra divisas pagando con **cada medio de pago**
+  (saldo, tarjeta, otra divisa de la billetera, QR y Stripe, cuyo cobro se confirma
+  por el mismo camino que el aviso real de Stripe); abre una compra y la cancela,
+  deja vencer otra, vende divisa y pide la **factura** de cada compra pagada.
+- `demo.cajero` abre la caja, atiende cuatro clientes (compra, venta y cambio entre
+  divisas, en efectivo, tarjeta y QR), descarta una cotización, factura las ventas de
+  divisa y **cierra la caja** con su reporte.
+
+Al terminar aparece una tabla con cada paso, su resultado y un botón **Ver** que
+lleva al comprobante, la factura o el reporte correspondiente. Las facturas que crea
+son **simuladas**: no gastan los números reales de Factura Segura.
 
 ---
 
@@ -543,7 +576,87 @@ Abajo de la pestaña *Caja* está el historial de **sesiones anteriores**, con u
 enlace al reporte de cada una. Un administrador ve las sesiones de todos los cajeros
 y puede abrir sus reportes y comprobantes, pero no completar operaciones de otro.
 
-## 13. Panel y Cuenta
+### 12.5 Factura de una operación de caja
+
+En el comprobante de una operación realizada en la que el cliente **se lleva divisa
+extranjera** (compra o cambio) aparece **Emitir factura**. El formulario ya trae el
+nombre y la cédula del cliente; falta el correo. Ver la sección 14. Cuando el cliente
+**vende** divisa no se factura: en ese caso la compradora es la casa de cambio.
+
+---
+
+## 13. Avisos de cotización (rol usuario)
+
+Pestaña **Avisos**. Cada vez que cambia el precio de una divisa activa —porque un
+gestor la editó o porque un administrador adelantó la simulación— cada cliente recibe
+un aviso con el precio de compra y de venta de antes y de ahora, y si subió o bajó.
+
+La barra lateral muestra al lado de *Avisos* cuántos hay **sin leer**. Cada aviso
+tiene **Marcar como leído**, y arriba está **Marcar todos como leídos**. Si se
+adelantan varios días de una vez, llega un solo aviso por divisa con el cambio
+total del período.
+
+---
+
+## 14. Facturas electrónicas
+
+Las facturas se emiten a través de **Factura Segura**, el servicio que las envía al
+**SIFEN** de la DNIT. El proyecto usa el **ambiente de prueba**: las facturas no
+tienen validez fiscal.
+
+### 14.1 Qué se factura
+
+- Una **compra en línea pagada**, con cualquier medio de pago.
+- Una **operación de caja** en la que el cliente se lleva divisa extranjera.
+
+La factura tiene un solo concepto (por ejemplo *Venta de 100,00 USD a Gs. 7.410
+c/u*), por el total en guaraníes y **exento de IVA**. Se pide a mano, desde el
+comprobante: no todas las operaciones necesitan factura.
+
+### 14.2 Pedirla
+
+**Solicitar factura** (en línea) o **Emitir factura** (en caja) abre un formulario:
+
+| Campo | Qué poner |
+|-------|-----------|
+| **Nombre o razón social** | Como debe figurar en la factura. |
+| **RUC o cédula** | El **RUC con guion y dígito verificador** (`1234567-8`) si el cliente es contribuyente, o **sólo el número de cédula** si no lo es. El sistema comprueba el dígito verificador y, si está mal, dice cuál es el correcto. |
+| **Correo electrónico** | Obligatorio: Factura Segura manda ahí la factura (PDF y XML) cuando el SIFEN la aprueba. |
+
+**Emitir factura** la genera y abre la factura.
+
+### 14.3 La factura y su estado
+
+La pantalla muestra la factura con el formato del KuDE (el comprobante impreso de la
+factura electrónica): emisor, número (`001-003-0000314`), fecha, cliente, concepto,
+totales y **CDC** (el código de 44 dígitos que la identifica en el SIFEN). Arriba
+está su estado:
+
+| Estado | Qué significa |
+|--------|---------------|
+| **En proceso en el SIFEN** | Se generó y el SIFEN la está revisando; suele tardar uno o dos minutos. La página consulta sola al abrirla; también está **Actualizar estado**. |
+| **Aprobada** | Lista. Se puede **Descargar KuDE (PDF)** y **Descargar XML**. |
+| **Rechazada por el SIFEN** / **No se pudo generar** | El motivo aparece en la pantalla. **Corregir y reenviar** abre el formulario con los datos cargados; se reenvía con el mismo número. |
+| **Sin confirmar** | Factura Segura no respondió a tiempo. Puede que se haya generado igual, así que sólo un administrador puede reenviarla, después de verificar. |
+| **Cancelada** | Un administrador pidió su cancelación y el SIFEN la aceptó. |
+
+**Imprimir** imprime sólo la factura, sin menú ni botones.
+
+> **Modo simulado.** Si el sistema no tiene configurado el acceso a Factura Segura,
+> las pantallas lo dicen (**Modo simulado**) y las facturas no se envían al SIFEN:
+> se numeran y se pueden ver e imprimir, pero no hay PDF ni XML para descargar. Las
+> facturas simuladas tienen su propia numeración.
+
+### 14.4 La pestaña Facturas
+
+Lista las facturas con número, fecha, cliente, operación, total y estado, con un
+filtro por estado. Cada rol ve lo suyo: el usuario, las de sus compras; el cajero,
+las de sus sesiones de caja; el administrador, todas. Un administrador puede además
+**Solicitar cancelación** de una factura aprobada.
+
+---
+
+## 15. Panel y Cuenta
 
 **Panel** confirma que la sesión sigue activa y lista los accesos que permite el rol
 actual. **Cuenta** muestra el nombre visible, el correo y el usuario, y da acceso a
@@ -552,7 +665,7 @@ borra la cuenta en Keycloak de forma definitiva.
 
 ---
 
-## 14. Recorrido de prueba completo
+## 16. Recorrido de prueba completo
 
 Para verificar que todo funciona de punta a punta, en unos cinco minutos:
 
@@ -587,53 +700,76 @@ Para verificar que todo funciona de punta a punta, en unos cinco minutos:
 11. Volver a **Mi billetera** y revisar *Movimientos recientes*: tienen que estar la
    carga, las compras (con tarjeta, con saldo y con dólares, con su venta de
    conversión) y la venta, cada una con su cotización.
+12. Si Stripe está configurado: comprar eligiendo **Tarjeta (Stripe)**, pagar en la
+   página de Stripe con `4242 4242 4242 4242` (cualquier fecha futura y CVC) y volver.
+   Tras unos segundos y una recarga, la compra figura como **Pagada**.
+13. Abrir una compra pagada y pulsar **Solicitar factura**. Escribir un RUC con un
+   dígito verificador equivocado (`2595733-4`): el formulario debe decir que es `3`.
+   Corregirlo y emitir. La factura se abre con su número y su CDC; en **Facturas**
+   aparece en la lista.
 
 **Como gestor (`demo.manager`):**
 
-12. Ir a **Divisas**. Editar el euro y bajar su precio de compra. Intentar poner un
+14. Ir a **Divisas**. Editar el euro y bajar su precio de compra. Intentar poner un
    precio de compra **mayor** que el de venta: el formulario debe rechazarlo.
-13. Ir a **Cotizaciones**, elegir el euro: el cambio recién hecho debe aparecer como
+15. Ir a **Cotizaciones**, elegir el euro: el cambio recién hecho debe aparecer como
    el último punto del gráfico, con origen *Carga manual*.
 
 **Como administrador (`demo.admin`):**
 
-14. Ir a **Simulación**. Anotar el día actual, pulsar **Avanzar un día** una vez y
+16. Ir a **Simulación**. Anotar el día actual, pulsar **Avanzar un día** una vez y
     después **Avanzar una semana**: el reloj debe quedar ocho días adelante.
-15. Verificar que cada vez aparezca la tabla de cambios, con variaciones siempre
+17. Verificar que cada vez aparezca la tabla de cambios, con variaciones siempre
     dentro de −5 % a +7 %, y que el precio de compra siga por debajo del de venta.
-16. Ir a **Cotizaciones**: el gráfico debe mostrar los ocho días nuevos.
-17. Ir a **Usuarios**, crear una cuenta de prueba con rol usuario, cambiarle los
+18. Ir a **Cotizaciones**: el gráfico debe mostrar los ocho días nuevos.
+19. Con `demo.customer`, abrir **Avisos**: debe haber avisos de los cambios de
+    cotización, y el contador de la barra lateral los cuenta. *Marcar todos como
+    leídos* lo deja en cero.
+20. De nuevo como `demo.admin`, en **Simulación** pulsar **Simular transacciones**:
+    la tabla de resultados debe listar las compras con cada medio de pago (incluida
+    *Stripe*), la compra cancelada y la vencida, la venta, las operaciones de caja, el
+    cierre (*cuadra*) y las facturas, todas sin errores. Cada **Ver** abre el
+    comprobante, la factura o el reporte.
+21. Ir a **Facturas**: deben aparecer todas, de todos los usuarios. Abrir una
+    aprobada y pulsar **Solicitar cancelación**: queda *Cancelada*.
+22. Ir a **Usuarios**, crear una cuenta de prueba con rol usuario, cambiarle los
     roles y eliminarla.
 
 **Como cajero (`demo.cajero`):**
 
-18. Ir a **Caja** y abrir la caja con Gs. 10.000.000, 5.000 USD y 5.000 EUR.
-19. Cotizar: el cliente entrega guaraníes y recibe 100 USD (*Monto que recibe el
+23. Ir a **Caja** y abrir la caja con Gs. 10.000.000, 5.000 USD y 5.000 EUR.
+24. Cotizar: el cliente entrega guaraníes y recibe 100 USD (*Monto que recibe el
    cliente*: 100). Debe abrirse la pestaña de la operación con la cuenta
    regresiva. Elegir **Efectivo**, cargar `Juan Pérez` y la cédula `4.567.890`, y
    confirmar. En el comprobante la cédula aparece con puntos; en la caja, los
    guaraníes subieron y los dólares bajaron 100.
-20. Otra operación: el cliente entrega euros y recibe 50 USD, pagando con
+25. En ese comprobante pulsar **Emitir factura**: el nombre y la cédula ya vienen
+   cargados. Agregar un correo y emitir.
+26. Otra operación: el cliente entrega euros y recibe 50 USD, pagando con
    **Tarjeta** (`4242 4242 4242 4242`, titular `JUAN PEREZ`, vencimiento `12/30`,
    código `123`). En el comprobante sólo se ve `Visa •••• 4242`. Los euros de la caja **no** cambian; los
    dólares bajan.
-21. Cotizar otra operación y pulsar **Cancelar operación**: la caja no cambia.
-22. Intentar cotizar más dólares de los que hay en la caja: el sistema lo rechaza.
-23. **Cerrar caja**: el reporte debe mostrar la apertura, el cierre, el cobro con
-   tarjeta en *Cobros que no entran a la caja* y las dos operaciones. Descargar el
+27. Una operación en la que el cliente **vende** dólares: su comprobante **no**
+   ofrece factura.
+28. Cotizar otra operación y pulsar **Cancelar operación**: la caja no cambia.
+29. Intentar cotizar más dólares de los que hay en la caja: el sistema lo rechaza.
+30. **Cerrar caja**: el reporte debe mostrar la apertura, el cierre, el cobro con
+   tarjeta en *Cobros que no entran a la caja* y las operaciones. Descargar el
    CSV y abrirlo.
 
 **Control de permisos:**
 
-24. Con `demo.customer`, escribir `http://localhost/simulation/` en la barra de
+31. Con `demo.customer`, escribir `http://localhost/simulation/` en la barra de
     direcciones: debe responder *Acceso denegado*. Lo mismo con `/currencies/`,
     `/manage/users/` y `/caja/`.
-25. Sin iniciar sesión, abrir `http://localhost/history/`: debe funcionar, porque la
+32. Con `demo.manager`, abrir `http://localhost/facturas/`: *Acceso denegado*. Con
+    otro usuario, abrir la dirección de una factura de `demo.customer`: *no existe*.
+33. Sin iniciar sesión, abrir `http://localhost/history/`: debe funcionar, porque la
     pizarra es pública.
 
 ---
 
-## 15. Preguntas frecuentes
+## 17. Preguntas frecuentes
 
 **Compré y vendí lo mismo al instante y perdí dinero. ¿Es un error?**
 No. Es el margen de la casa de cambio: se compra al precio de venta (más alto) y se
@@ -667,6 +803,25 @@ cobros aparecen aparte en el reporte, para controlarlos contra el POS y el banco
 El reporte muestra lo que *debería* haber según las operaciones registradas. Por
 ahora el sistema no pide el conteo físico al cerrar; si hay diferencia, anotala
 aparte.
+
+**Pagué con Stripe, volví y la compra sigue pendiente.**
+Volver de Stripe no confirma la compra: la confirma Stripe cuando avisa que cobró, en
+unos segundos. Actualizá la pantalla de pago. Si Stripe no llega a cobrar antes de
+que venza el plazo, el cobro se devuelve solo.
+
+**¿Por qué no puedo facturar una operación?**
+Sólo se factura una compra **pagada** o una operación de caja en la que el cliente se
+lleva divisa extranjera. Cuando el cliente vende divisa, la compradora es la casa de
+cambio y no corresponde una factura.
+
+**Pedí la factura y dice "No se pudo generar".**
+El motivo está en la pantalla de la factura (por ejemplo, un correo inválido).
+**Corregir y reenviar** la vuelve a enviar con el mismo número.
+
+**La factura dice "simulada". ¿Sirve?**
+No tiene validez: el sistema no tiene configurado el acceso a Factura Segura, así que
+la factura no se envió al SIFEN. Incluso las reales del proyecto son del ambiente de
+prueba y tampoco tienen validez fiscal.
 
 **¿Por qué no puedo cargar saldo?**
 Hace falta al menos una tarjeta registrada. Ir a *Mi billetera* → *Agregar tarjeta*.
