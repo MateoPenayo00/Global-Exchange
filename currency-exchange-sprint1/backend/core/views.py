@@ -10,9 +10,11 @@ from django.contrib.auth import logout
 from django.core.exceptions import PermissionDenied
 from django.db import transaction
 from django.db.models import ProtectedError
-from django.http import Http404
+from django.http import Http404, HttpResponse
 from django.shortcuts import get_object_or_404, render, redirect
 from django.urls import reverse
+from django.views.decorators.csrf import csrf_exempt
+from django.views.decorators.http import require_POST
 
 from . import roles as role_lib
 from .forms import (
@@ -40,7 +42,7 @@ from .models import (
     quantize_pyg,
 )
 from .roles import ROLE_LABELS
-from .services import checkout, pricing
+from .services import checkout, pricing, stripe_payments
 from .services.charts import build_rate_chart
 from .services.keycloak_admin import KeycloakAdminClient, KeycloakAdminError
 from .services.qr import mock_qr_path
@@ -414,6 +416,14 @@ def purchase_checkout(request, order_id):
     if checkout.expire_due_orders(wallet):
         order.refresh_from_db()
 
+    # Al volver de Stripe el navegador trae ?stripe=success|cancel. Que haya vuelto
+    # no significa que se cobró: eso lo confirma el webhook.
+    stripe_return = request.GET.get("stripe")
+    if stripe_return == "success" and order.is_pending:
+        messages.info(request, "Recibimos tu pago. Estamos confirmándolo con Stripe; actualizá esta página en unos segundos.")
+    elif stripe_return == "cancel" and order.is_pending:
+        messages.warning(request, "Cancelaste el pago en Stripe. No se cobró nada; podés elegir otro medio de pago.")
+
     context = _nav_context(request)
     context.update({"order": order, "wallet": wallet})
     if order.is_pending:
@@ -450,6 +460,8 @@ def purchase_confirm(request, order_id):
         return redirect("purchase_checkout", order_id=order_id)
     wallet, order = _own_order(request, order_id)
     source_key = request.POST.get("payment_source", "")
+    if source_key == checkout.STRIPE_KEY:
+        return _start_stripe_payment(request, wallet, order)
     try:
         order = checkout.confirm_order(order.id, wallet, source_key)
     except PurchaseOrder.DoesNotExist:
@@ -465,6 +477,47 @@ def purchase_confirm(request, order_id):
         f"(precio de venta congelado Gs. {guarani(order.rate)}).",
     )
     return redirect("trade")
+
+
+def _start_stripe_payment(request, wallet, order):
+    """Abre la sesión de Stripe de ``order`` y lleva al usuario a pagar allí."""
+    checkout_url = reverse("purchase_checkout", args=[order.id])
+    stripe_choice = urlencode({"pay": checkout.STRIPE_KEY})
+
+    if checkout.expire_due_orders(wallet):
+        order.refresh_from_db()
+    if not order.is_pending:
+        messages.error(request, f"Esta compra ya está {order.get_status_display().lower()}.")
+        return redirect(checkout_url)
+
+    try:
+        pay_url = stripe_payments.create_checkout_session(
+            order,
+            success_url=request.build_absolute_uri(f"{checkout_url}?stripe=success"),
+            cancel_url=request.build_absolute_uri(f"{checkout_url}?stripe=cancel&{stripe_choice}"),
+        )
+    except stripe_payments.StripeError as exc:
+        messages.error(request, str(exc))
+        return redirect(f"{checkout_url}?{stripe_choice}")
+    return redirect(pay_url)
+
+
+@csrf_exempt
+@require_POST
+def stripe_webhook(request):
+    """Recibe los avisos de Stripe. Sólo se acepta lo que trae una firma válida.
+
+    No tiene sesión de usuario ni CSRF (lo llama Stripe, no un navegador): la
+    firma ``Stripe-Signature`` es la que prueba que el aviso es genuino.
+    """
+    if not stripe_payments.is_enabled() or not settings.STRIPE_WEBHOOK_SECRET:
+        return HttpResponse(status=503)
+    try:
+        event = stripe_payments.parse_event(request.body, request.META.get("HTTP_STRIPE_SIGNATURE", ""))
+    except stripe_payments.InvalidWebhook:
+        return HttpResponse(status=400)
+    stripe_payments.handle_event(event)
+    return HttpResponse(status=200)
 
 
 @role_required(role_lib.USER)

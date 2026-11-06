@@ -344,12 +344,14 @@ class PurchaseOrder(models.Model):
     PAY_CURRENCY = "currency"
     PAY_CARD = "card"
     PAY_QR = "qr"
+    PAY_STRIPE = "stripe"
 
     PAYMENT_KIND_CHOICES = [
         (PAY_BALANCE, "Saldo en guaraníes"),
         (PAY_CURRENCY, "Otra divisa de la billetera"),
         (PAY_CARD, "Tarjeta de crédito"),
         (PAY_QR, "Código QR"),
+        (PAY_STRIPE, "Tarjeta (Stripe)"),
     ]
 
     wallet = models.ForeignKey(Wallet, on_delete=models.CASCADE, related_name="purchase_orders")
@@ -368,6 +370,10 @@ class PurchaseOrder(models.Model):
     )
     paid_amount = models.DecimalField(max_digits=18, decimal_places=6, null=True, blank=True)
     qr_reference = models.CharField(max_length=40, blank=True)
+    # Datos del pago con Stripe: la sesión de Checkout que se abrió y, una vez
+    # cobrado, el PaymentIntent (sirve para reembolsar o auditar).
+    stripe_session_id = models.CharField(max_length=120, blank=True)
+    stripe_payment_intent = models.CharField(max_length=120, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     expires_at = models.DateTimeField()
     closed_at = models.DateTimeField(null=True, blank=True)
@@ -402,6 +408,31 @@ class PurchaseOrder(models.Model):
         """Precio de compra congelado de ``currency``, o ``None`` si no se congeló."""
         value = self.frozen_rates.get(currency.code)
         return Decimal(value) if value is not None else None
+
+
+class StripeEvent(models.Model):
+    """Evento de webhook de Stripe ya procesado.
+
+    Stripe reenvía un evento si no recibe un 200 a tiempo, así que el mismo
+    ``event_id`` puede llegar más de una vez. Guardarlo (con restricción de
+    unicidad) permite ignorar los repetidos y no acreditar dos veces la misma compra.
+    """
+
+    event_id = models.CharField(max_length=120, unique=True)
+    event_type = models.CharField(max_length=80)
+    order = models.ForeignKey(
+        PurchaseOrder, on_delete=models.SET_NULL, null=True, blank=True, related_name="stripe_events"
+    )
+    outcome = models.CharField(max_length=40, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        verbose_name = "evento de Stripe"
+        verbose_name_plural = "eventos de Stripe"
+
+    def __str__(self):
+        return f"{self.event_type} · {self.event_id}"
 
 
 # --- Caja física ----------------------------------------------------------

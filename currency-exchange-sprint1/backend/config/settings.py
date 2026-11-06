@@ -111,6 +111,14 @@ KEYCLOAK_CLIENT_SECRET = os.getenv("KEYCLOAK_CLIENT_SECRET", "change-me-web-secr
 KEYCLOAK_ADMIN_CLIENT_ID = os.getenv("KEYCLOAK_ADMIN_CLIENT_ID", "exchange-admin-api")
 KEYCLOAK_ADMIN_CLIENT_SECRET = os.getenv("KEYCLOAK_ADMIN_CLIENT_SECRET", "change-me-admin-secret")
 
+# Stripe (modo de prueba en desarrollo). Sin STRIPE_SECRET_KEY el medio de pago
+# "Tarjeta (Stripe)" no se ofrece en la pantalla de pago.
+STRIPE_SECRET_KEY = os.getenv("STRIPE_SECRET_KEY", "")
+STRIPE_PUBLISHABLE_KEY = os.getenv("STRIPE_PUBLISHABLE_KEY", "")
+STRIPE_WEBHOOK_SECRET = os.getenv("STRIPE_WEBHOOK_SECRET", "")
+# El guaraní es una moneda sin decimales en Stripe: el monto se envía en unidades enteras.
+STRIPE_CURRENCY = os.getenv("STRIPE_CURRENCY", "pyg").lower()
+
 OIDC_RP_CLIENT_ID = KEYCLOAK_CLIENT_ID
 OIDC_RP_CLIENT_SECRET = KEYCLOAK_CLIENT_SECRET
 OIDC_RP_SIGN_ALGO = "RS256"
