@@ -9,8 +9,10 @@ sólo el código. Si una parte importante del trabajo se hizo con asistencia de 
 forma parte del proceso y corresponde documentarlo con el mismo criterio con que se
 documenta cualquier otra herramienta del equipo.
 
-Documentos hermanos: `DOCUMENTACION_TECNICA.md`, `MANUAL_DE_USUARIO.md` y
-`SECRETOS_Y_CONFIGURACION.md`.
+Documentos hermanos: `DOCUMENTACION_TECNICA.md`, `MANUAL_DE_USUARIO.md`,
+`SECRETOS_Y_CONFIGURACION.md`, `DESPLIEGUE.md` y `FACTURACION_ELECTRONICA.md`.
+
+Las secciones 2 a 9 cuentan los Sprints 1 a 3; la sección 10, el Sprint 5.
 
 ---
 
@@ -20,10 +22,11 @@ Documentos hermanos: `DOCUMENTACION_TECNICA.md`, `MANUAL_DE_USUARIO.md` y
 |---|---|
 | **Herramienta** | Claude (modelo Opus) a través de Claude Code, un agente de línea de comandos con acceso al repositorio, a la terminal y al stack de Docker. |
 | **Modalidad** | Conversacional. El equipo describe el objetivo en lenguaje natural; la IA explora el código, propone e implementa, ejecuta las pruebas y reporta. |
-| **Sprints con asistencia** | Los tres. La documentación de los Sprints 1 y 2 ya registraba sesiones de trabajo asistido; el Sprint 3 se desarrolló íntegramente de esta forma. |
+| **Sprints con asistencia** | Todos. La documentación de los Sprints 1 y 2 ya registraba sesiones de trabajo asistido; los Sprints 3 y 5 se desarrollaron en gran parte de esta forma. |
 | **Qué aportó la IA** | Implementación, migraciones de base de datos, pruebas unitarias, documentación y depuración. |
 | **Qué siguió siendo del equipo** | La definición de los objetivos del sprint, las decisiones de producto, la priorización y la validación de los resultados. |
 | **Resultado del Sprint 3** | 8 objetivos cumplidos, 98 pruebas unitarias en verde, documentación reducida de 18 archivos dispersos a 4 documentos. |
+| **Resultado del Sprint 5** | Los 3 puntos de alcance del Hito 7 implementados en 4 ramas, 79 pruebas nuevas (314 en total, en verde) y la documentación actualizada con lo que habían integrado los compañeros (Stripe, avisos, Sphinx). Ver la sección 10. |
 
 La conclusión corta: **la IA aceleró mucho la ejecución, pero no reemplazó la decisión
 de qué construir ni la responsabilidad de verificar que esté bien.** Cada vez que el
@@ -364,9 +367,11 @@ Conviene ser explícito, porque es lo que la materia evalúa:
   los lea.
 - **Documentación que se multiplica.** Ya pasó entre el Sprint 1 y el 2. Es el riesgo
   más probable de repetirse, porque escribir documentación con IA no cuesta
-  prácticamente nada. La regla que se adopta de acá en adelante: **la carpeta
+  prácticamente nada. La regla que se adoptó en el Sprint 3: **la carpeta
   `Documentacion/` tiene cuatro documentos y los cambios se hacen dentro de ellos, no
-  en archivos nuevos.**
+  en archivos nuevos.** En el Sprint 5 la regla se ajustó (ver la sección 10.4): **un
+  documento por tema, todos listados en la tabla del principio de
+  `DOCUMENTACION_TECNICA.md`, y nunca dos documentos sobre lo mismo.**
 - **Falsa sensación de cobertura.** 98 pruebas en verde se sienten como garantía y no lo
   son: no cubren el login real contra Keycloak, ni las llamadas al Admin API, ni la
   validez del HTML, ni cómo se ve el sitio en un navegador. La sección 8 del documento
@@ -377,7 +382,7 @@ Conviene ser explícito, porque es lo que la materia evalúa:
 
 ---
 
-## 9. Conclusión
+## 9. Conclusión (Sprint 3)
 
 Para la materia la conclusión relevante no es "la IA escribió el código". Es que **la
 asistencia de IA cambió el lugar donde está el cuello de botella del proyecto.**
@@ -392,3 +397,121 @@ porque en ese punto nadie estaba verificando todavía.
 Dicho de la forma más corta posible: **la IA no hizo falta menos ingeniería de software,
 hizo falta distinta.** Menos tiempo escribiendo líneas, más tiempo definiendo bien el
 problema, revisando diffs y desconfiando de las cosas que parecen estar bien.
+
+---
+
+## 10. El Sprint 5
+
+### 10.1 El pedido y cómo arrancó
+
+El pedido fue completar el **Hito 7** de la guía de la cátedra (facturación
+electrónica con visualización y descarga, simulación completa de transacciones y
+script de despliegue automático) usando el manual del API de Factura Segura y el
+correo de habilitación, y además **documentar lo que los compañeros habían
+integrado** (Stripe, avisos de cotización y Sphinx).
+
+La sesión arrancó con un detalle que vale la pena registrar: una sesión anterior se
+había cortado por un error del API de la IA, y el pedido fue "seguí donde quedaste".
+La IA no tenía memoria de esa sesión, así que en lugar de suponer revisó el estado
+real: no había cambios sin commitear, y la rama `development` local estaba **varios
+merges atrás de `origin/development`** (justamente los PR de Stripe, Sphinx y avisos).
+Sin ese `git fetch`, todo el sprint se habría construido y documentado sobre código
+viejo. Lo primero fue traer esos cambios (*fast-forward*, sin conflictos) y correr las
+pruebas existentes como línea de base: 235 en verde.
+
+### 10.2 La secuencia de trabajo
+
+| Rama | Qué hizo la IA |
+|------|----------------|
+| `FX-23` | Leyó el manual de Factura Segura entero (protocolo, siete operaciones, estructura del DE, reglas para interpretar los estados del SIFEN) y el correo de habilitación. Implementó el cliente del API, el modelo `Invoice`, la emisión, los estados y las pantallas, con 60 pruebas. |
+| `FX-24` | Extrajo la venta y la carga de saldo de las vistas a `services/checkout.py` y escribió `services/demo.py`, que recorre todo el ciclo con los servicios reales; luego el botón del panel y el comando `poblar_demo`, con 19 pruebas. |
+| `FX-25` | Escribió `deploy.sh` y los dos archivos de ambiente, y **corrió el despliegue de desarrollo de punta a punta** sobre el stack del equipo (migraciones, datos de demostración y las 314 pruebas dentro del contenedor desplegado). |
+| `FX-26` | Esta documentación, la planificación del Sprint 6 y el CSV para Jira. |
+
+Cada rama salió de la anterior (son dependientes: la simulación factura y el
+despliegue puebla con la simulación), con commits chicos y el mismo formato que
+venía usando el equipo (`Área: descripción`).
+
+### 10.3 Qué aportó
+
+- **Verificar contra la fuente, no contra sí misma.** El riesgo de una integración
+  fiscal es que las pruebas confirmen lo que el propio código cree. Para evitarlo, las
+  pruebas del cálculo usan **el ejemplo numérico del manual de Factura Segura** (cinco
+  ítems: IVA 5 %, 10 %, gravado parcial, exento y exonerado) y exigen los mismos
+  totales al guaraní; y la construcción del CDC se probó contra **el CDC de ejemplo del
+  manual**, dígito verificador incluido. Las dos pasaron, lo que da bastante más
+  confianza que cualquier prueba escrita a partir del código.
+- **Cuidar un recurso escaso.** El rango habilitado en TEST es de 12 facturas. Eso
+  llevó a tres decisiones que no estaban en el pedido: facturar a pedido y no en cada
+  operación, un **modo simulado** con numeración propia (que usan las pruebas, la
+  simulación y la población de datos), y **no liberar nunca un número**: un envío que
+  falla se reintenta con el mismo, como recomienda el manual ante resultados sin
+  confirmar.
+- **Probar el script de verdad.** El despliegue de desarrollo se corrió completo; ahí
+  aparecieron dos problemas que la lectura del código no mostraba (ver 10.5).
+- **Una sonda inocua del API real.** Sin token, una sola petición vacía al endpoint de
+  TEST confirmó que está accesible y cómo responde a un pedido sin autenticar (HTTP 401
+  con JSON), que es el caso que el cliente tenía que manejar.
+
+### 10.4 Lo que siguió siendo del equipo (y las decisiones que quedan abiertas)
+
+- **Qué y cómo se factura.** La IA eligió facturar el total de la operación como
+  **exento de IVA** y no facturar cuando el cliente vende divisa. Son decisiones
+  razonables pero de negocio: quedaron documentadas como tales para que el equipo y el
+  PO las confirmen.
+- **El token de Factura Segura.** El correo de habilitación no trae la contraseña del
+  usuario ESI, así que no se emitió ningún documento real. Hay un comando para obtener
+  el token, pero **la primera emisión real la tiene que hacer el equipo**, idealmente
+  probando antes con `calcular_de`.
+- **El requisito del Sprint 3 sobre cancelación por cambio de cotización.** Al leer la
+  guía completa, la IA notó que el Sprint 3 pedía *cancelar* una transacción si la
+  cotización cambia antes del pago, y que el sistema hoy hace otra cosa (mantiene el
+  precio congelado 5 minutos). No lo cambió: lo dejó como historia del Sprint 6 para
+  decidirlo con el PO.
+- **La regla de los cuatro documentos.** Los compañeros ya habían agregado `STRIPE.md`
+  y `SPHINX.md`, y el Sprint 5 necesitaba explicar dos temas largos (la facturación y
+  el despliegue). En lugar de inflar más el documento técnico, se ajustó la regla a
+  *un documento por tema, todos indexados desde el documento técnico*. La
+  planificación del Sprint 6, que no es un tema propio, se escribió dentro del
+  documento técnico y no en un archivo nuevo.
+- **Publicar.** Subir las ramas, abrir los pull requests, integrar a `main` y crear el
+  tag `v0.5` quedan para el equipo, igual que cargar el Sprint 6 en Jira.
+
+### 10.5 Dónde se equivocó
+
+- **Secretos demasiado cortos.** El script generaba claves aleatorias de 48
+  caracteres; Django recomienda al menos 50 para `SECRET_KEY`. Lo detectó
+  `manage.py check --deploy` al revisar la configuración de producción, no la IA al
+  escribirlo. Se corrigió a 64.
+- **Archivos de `root` en el disco del equipo.** Para generar la migración, la IA
+  corrió `makemigrations` en un contenedor con el código montado, y la migración (y
+  una carpeta vacía) quedaron con dueño `root`. Se corrigió el dueño, y el problema
+  terminó cambiando el diseño del ambiente de desarrollo: los estáticos se recolectan
+  fuera de la carpeta montada, para que el ambiente no ensucie el repositorio.
+- **Formato de montos.** El primer reporte de la simulación mostraba
+  `2.157.050,00 PYG` en lugar de `Gs. 2.157.050`. Lo mostró la primera corrida real del
+  despliegue; ninguna prueba miraba ese texto.
+- **Una acción que no correspondía.** Para probar el ambiente de producción, la IA
+  intentó correr el despliegue de producción con `--insecure` sobre la máquina del
+  equipo, que tiene las contraseñas de ejemplo. **El sistema de permisos del agente
+  lo bloqueó**, y con razón: era levantar "producción" con secretos débiles sobre el
+  entorno de otra persona. Lo que sí hizo después fue verificar por separado lo
+  riesgoso —Keycloak en modo producción, en un contenedor descartable con otro nombre
+  y otro puerto, y Django sin `DEBUG` con `check --deploy`— sin tocar el stack del
+  equipo. La corrida completa de `deploy.sh prod` queda pendiente con secretos
+  propios. Es un buen ejemplo de por qué conviene que el agente no tenga permiso para
+  todo.
+
+### 10.6 Conclusión del Sprint 5
+
+Lo que cambió respecto del Sprint 3 es dónde se puso la verificación. En el Sprint 3
+varios errores llegaron lejos porque nadie verificaba todavía (sección 5). En este,
+la verificación se planificó desde el principio y contra fuentes externas al código:
+el ejemplo del manual, el estado real del repositorio remoto, una corrida real del
+despliegue y la propia herramienta de chequeo de Django. Cada error de la sección 10.5
+lo encontró una de esas verificaciones, no una lectura del código.
+
+Lo que no cambió: **la IA no puede validar lo que no puede ver.** La facturación real
+depende de un token que no tenía, y el despliegue de producción de secretos que no
+corresponde que elija ella. Esos dos cierres son del equipo.
+
