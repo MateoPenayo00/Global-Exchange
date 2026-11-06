@@ -121,6 +121,12 @@ def _currencies() -> list[Currency]:
     return active
 
 
+def _money(amount, currency) -> str:
+    if currency.code == BASE_CURRENCY_CODE:
+        return f"Gs. {guarani(amount)}"
+    return f"{units(amount)} {currency.code}"
+
+
 def _pick(currencies, index):
     return currencies[index % len(currencies)]
 
@@ -283,8 +289,8 @@ def _cash_round(user, report, rng):
             report.add(area, f"{currency_in.code} → {currency_out.code}", str(exc), ok=False)
             continue
         report.add(area, f"Operación #{tx.id}: {tx.description}",
-                   f"{name} entregó {units(tx.amount_in)} {currency_in.code} ({tx.get_payment_method_display().lower()}) "
-                   f"y recibió {units(tx.amount_out)} {currency_out.code}",
+                   f"{name} entregó {_money(tx.amount_in, currency_in)} ({tx.get_payment_method_display()}) "
+                   f"y recibió {_money(tx.amount_out, currency_out)}",
                    url=reverse("cash_operation", args=[tx.id]))
         if not invoicing.invoice_blocker(tx):
             customer = invoicing.Customer(kind=Invoice.NON_TAXPAYER, name=name, email="cliente.caja@example.com",
