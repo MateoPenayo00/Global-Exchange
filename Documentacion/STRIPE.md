@@ -45,3 +45,12 @@ Pago rechazado: `4000 0000 0000 0002`.
 ```bash
 docker compose exec web python manage.py test core.tests_stripe
 ```
+
+## Relación con el resto del sistema
+
+- Una compra pagada con Stripe se puede **facturar** como cualquier otra: el medio de
+  pago se informa como tarjeta de crédito (`FACTURACION_ELECTRONICA.md`).
+- La **simulación completa de transacciones** (`services/demo.py`) paga una compra con
+  Stripe pasando un evento `checkout.session.completed` sintético por
+  `stripe_payments.handle_event()`, el mismo código que atiende el webhook, sin llamar
+  a Stripe.

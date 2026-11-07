@@ -1,0 +1,31 @@
+Summary,Issue Type,Priority,Story Points,Sprint,Description,Labels
+FX-27 Reporte de transacciones,Story,High,5,SCRUM Sprint 6,"Como gestor, quiero un reporte de transacciones filtrable por fecha, tipo (compra, venta, caja), divisa y medio de pago, exportable a CSV.
+
+Criterios: filtros combinables; incluye compras en línea, ventas y operaciones de caja; total en guaraníes; exporta CSV con el mismo formato que el reporte de caja; sólo gestor y administrador.",sprint6
+FX-28 Reporte de ganancias,Story,High,8,SCRUM Sprint 6,"Como administrador, quiero un reporte de ganancias con el margen realizado de cada operación.
+
+Criterios: ganancia = lo cobrado menos el valor al precio de compra del momento (frozen_rates en compras en línea; rate_in/rate_out en caja); por operación y totalizado; filtrable por fecha y divisa; exporta CSV.",sprint6
+FX-29 Tablero de control de ganancias,Story,High,8,SCRUM Sprint 6,"Como administrador, quiero un tablero de control de ganancias.
+
+Criterios: totales por día, semana y divisa; gráfico de evolución; cifras coherentes con FX-28; sólo administrador.",sprint6
+FX-30 Comparar la evolución de varias divisas,Story,Medium,3,SCRUM Sprint 6,"Como cliente, quiero comparar la evolución de varias divisas en el mismo gráfico.
+
+Criterios: elegir dos o más divisas y el período; variación porcentual para que sean comparables; accesible sin JavaScript.",sprint6
+FX-31 Terminal de autoservicio,Story,High,8,SCRUM Sprint 6,"Como cliente sin cuenta, quiero operar en una terminal de autoservicio que recibe y entrega efectivo (simulado).
+
+Criterios: flujo de compra y venta en efectivo; cotización congelada con plazo; su propia caja con apertura, cierre y reporte; acreditación y cancelación verificables en QA.",sprint6
+FX-32 Producción con HTTPS y secretos rotados,Story,High,5,SCRUM Sprint 6,"Como equipo, queremos desplegar producción con HTTPS y con los secretos de los clientes de Keycloak rotados.
+
+Criterios: deploy.sh prod corre sin --insecure; check --deploy sin advertencias; cookies seguras y redirección a HTTPS; secretos de exchange-web y exchange-admin-api distintos de los del realm export.",sprint6
+FX-33 Factura Segura real y notas de crédito,Story,Medium,5,SCRUM Sprint 6,"Como cliente, quiero que mi factura llegue al SIFEN, y poder devolver una operación facturada con su nota de crédito.
+
+Criterios: token configurado; calcular_de y luego generar_de sobre un número del rango; estado Aprobado consultado; KuDE y XML descargados; nota de crédito iTiDE=5 en el rango 0000109-0000120.",sprint6
+FX-34 Revisión QA del flujo crítico,Story,High,3,SCRUM Sprint 6,"Como PO, quiero una revisión QA del flujo crítico de compra y venta.
+
+Criterios: acreditación, cancelación y vencimiento en línea, caja y terminal; decidir con el PO si una compra pendiente se cancela cuando cambia la cotización (pedido del Sprint 3) o mantiene el precio congelado; revisión de roles.",sprint6
+FX-35 Informe final,Story,High,3,SCRUM Sprint 6,"Como equipo, queremos el informe final del proyecto.
+
+Criterios: máximo 6 páginas en PDF con carátula, introducción, equipo, proceso, oportunidades de mejora, lecciones aprendidas, experiencias, contraste con los requerimientos de IS1 y conclusiones.",sprint6
+FX-36 Tablero de Jira completo,Story,High,1,SCRUM Sprint 6,"Como equipo, queremos el tablero de Jira con todas las historias redactadas, estimadas y asignadas.
+
+Criterios: todas las historias del proyecto con criterios de aceptación, story points y responsable; sprint 6 cerrado al final.",sprint6
