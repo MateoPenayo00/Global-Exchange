@@ -138,7 +138,9 @@ def wallet_view(request):
             "test_deposit_amount": TEST_DEPOSIT_AMOUNT,
             "test_withdraw_amount": TEST_WITHDRAW_AMOUNT,
             "deposit_presets": DEPOSIT_PRESETS,
-            "transactions": wallet.transactions.select_related("currency", "payment_method")[:20],
+            "transactions": wallet.transactions.select_related(
+                "currency", "payment_method", "purchase_order__invoice"
+            )[:20],
         }
     )
     return render(request, "core/wallet.html", context)
@@ -477,7 +479,7 @@ def purchase_confirm(request, order_id):
         f"Compraste {units(order.currency_amount)} {order.currency.code} por Gs. {guarani(order.pyg_amount)} "
         f"(precio de venta congelado Gs. {guarani(order.rate)}).",
     )
-    return redirect("trade")
+    return redirect("purchase_checkout", order_id=order.id)
 
 
 def _start_stripe_payment(request, wallet, order):

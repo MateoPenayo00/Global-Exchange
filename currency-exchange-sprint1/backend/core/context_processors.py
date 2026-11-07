@@ -28,6 +28,7 @@ def roles(request):
             "can_simulate": role_lib.is_admin(user),
             "can_trade": role_lib.is_trader(user),
             "can_operate_cash": role_lib.is_cashier(user),
+            "can_view_invoices": role_lib.has_role(user, role_lib.USER, role_lib.CASHIER, role_lib.ADMIN),
         }
     )
     return base

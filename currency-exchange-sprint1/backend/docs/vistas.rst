@@ -10,3 +10,8 @@ Módulo de caja
 --------------
 
 .. automodule:: core.cashier_views
+
+Facturas
+--------
+
+.. automodule:: core.invoice_views

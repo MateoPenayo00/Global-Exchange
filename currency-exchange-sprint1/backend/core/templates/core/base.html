@@ -56,6 +56,12 @@
               </a>
             {% endif %}
 
+            {% if can_view_invoices %}
+              <a class="nav-item {% if '/facturas/' in request.path %}is-active{% endif %}" href="{% url 'invoice_list' %}">
+                <span class="nav-hex" aria-hidden="true"></span>Facturas
+              </a>
+            {% endif %}
+
             {% if can_manage_currencies or can_simulate or can_manage_users %}
               <p class="nav-group">Administración</p>
               {% if can_manage_currencies %}

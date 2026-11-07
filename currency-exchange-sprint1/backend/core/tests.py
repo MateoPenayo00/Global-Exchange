@@ -1138,7 +1138,7 @@ class CheckoutTests(TestCase):
         self._fund()
         _, order = self._open()
         response = self._confirm(order, "balance")
-        self.assertRedirects(response, "/trade/")
+        self.assertRedirects(response, f"/trade/checkout/{order.id}/")
         order.refresh_from_db()
         self.wallet.refresh_from_db()
         self.assertEqual(order.status, PurchaseOrder.COMPLETED)

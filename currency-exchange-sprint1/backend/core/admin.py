@@ -6,6 +6,7 @@ from .models import (
     CashTransaction,
     Currency,
     CurrencyRate,
+    Invoice,
     PaymentMethod,
     PurchaseOrder,
     SimulationState,
@@ -97,3 +98,14 @@ class CashTransactionAdmin(admin.ModelAdmin):
     )
     list_filter = ("status", "payment_method", "currency_in", "currency_out")
     search_fields = ("customer_name", "customer_document", "qr_reference")
+
+
+@admin.register(Invoice)
+class InvoiceAdmin(admin.ModelAdmin):
+    list_display = (
+        "id", "full_number", "is_simulated", "status", "sifen_status", "customer_name", "total", "issued_at",
+    )
+    list_filter = ("status", "is_simulated", "customer_kind")
+    search_fields = ("number", "cdc", "customer_name", "customer_ruc", "customer_document", "customer_email")
+    # Es un registro fiscal: se consulta desde acá, pero se emite y se cancela desde la pestaña Facturas.
+    readonly_fields = [field.name for field in Invoice._meta.fields]
