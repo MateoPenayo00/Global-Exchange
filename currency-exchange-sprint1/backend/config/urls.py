@@ -46,6 +46,7 @@ urlpatterns = [
     path("simulation/", views.simulation_panel, name="simulation"),
     path("simulation/advance-day/", views.simulation_advance_day, name="simulation_advance_day"),
     path("simulation/advance-week/", views.simulation_advance_week, name="simulation_advance_week"),
+    path("simulation/transactions/", views.simulation_transactions, name="simulation_transactions"),
     path("manage/users/", views.admin_users, name="admin_users"),
     path("manage/users/new/", views.admin_user_create, name="admin_user_create"),
     path("manage/users/<str:user_id>/roles/", views.admin_user_roles, name="admin_user_roles"),

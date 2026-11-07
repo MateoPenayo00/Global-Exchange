@@ -42,7 +42,8 @@ from .models import (
     quantize_pyg,
 )
 from .roles import ROLE_LABELS
-from .services import checkout, pricing, stripe_payments
+from .services import cashier, checkout, pricing, stripe_payments
+from .services.demo import simulate_transactions
 from .services.charts import build_rate_chart
 from .services.keycloak_admin import KeycloakAdminClient, KeycloakAdminError
 from .services.qr import mock_qr_path
@@ -217,17 +218,7 @@ def wallet_deposit_test(request):
 
 def _credit_balance(wallet, amount, card, note):
     """Suma guaraníes al saldo y deja el movimiento registrado."""
-    with transaction.atomic():
-        wallet.pyg_balance += amount
-        wallet.save(update_fields=["pyg_balance", "updated_at"])
-        WalletTransaction.objects.create(
-            wallet=wallet,
-            kind=WalletTransaction.DEPOSIT,
-            payment_method=card,
-            amount=amount,
-            pyg_amount=amount,
-            note=note,
-        )
+    checkout.deposit(wallet, amount, card, note)
 
 
 @role_required(role_lib.USER)
@@ -365,35 +356,17 @@ def _process_sell(request, wallet, form) -> bool:
     """Ejecuta una venta de divisa hacia guaraníes. Devuelve ``True`` si se concretó."""
     currency = form.cleaned_data["currency"]
     amount = form.cleaned_data["amount"]
-    holding = wallet.holdings.filter(currency=currency).first()
-
-    if not holding or holding.amount < amount:
-        messages.error(request, f"No tienes suficiente {currency.code} para vender esa cantidad.")
+    try:
+        # Se vende al precio de compra de la divisa: es lo que paga la casa de cambio.
+        sale = checkout.sell_currency(wallet, currency, amount)
+    except checkout.CheckoutError as exc:
+        messages.error(request, str(exc))
         return False
-
-    # Se vende al precio de compra de la divisa: es lo que paga la casa de cambio.
-    rate = currency.buy_rate
-    pyg_amount = quantize_pyg(amount * rate)
-
-    with transaction.atomic():
-        holding.amount -= amount
-        holding.save(update_fields=["amount"])
-        wallet.pyg_balance += pyg_amount
-        wallet.save(update_fields=["pyg_balance", "updated_at"])
-        WalletTransaction.objects.create(
-            wallet=wallet,
-            kind=WalletTransaction.SELL,
-            currency=currency,
-            amount=amount,
-            pyg_amount=pyg_amount,
-            rate_used=rate,
-            note="Venta de divisa",
-        )
 
     messages.success(
         request,
-        f"Vendiste {amount} {currency.code} y recibiste Gs. {pyg_amount:,.0f} "
-        f"(precio de compra Gs. {rate:,.0f}).".replace(",", "."),
+        f"Vendiste {amount} {currency.code} y recibiste Gs. {sale.pyg_amount:,.0f} "
+        f"(precio de compra Gs. {sale.rate_used:,.0f}).".replace(",", "."),
     )
     return True
 
@@ -715,6 +688,7 @@ def simulation_panel(request):
             "max_change_percent": (MAX_DAILY_CHANGE * Decimal("100")).quantize(Decimal("0.1")),
             "last_changes": request.session.pop("last_simulation_changes", None),
             "last_simulation_days": request.session.pop("last_simulation_days", None),
+            "last_transactions": request.session.pop("last_transaction_simulation", None),
         }
     )
     return render(request, "core/simulation.html", context)
@@ -730,6 +704,28 @@ def simulation_advance_day(request):
 def simulation_advance_week(request):
     """Adelanta siete días de una vez, para ver una tendencia con un solo clic."""
     return _advance(request, 7)
+
+
+@role_required(role_lib.ADMIN)
+def simulation_transactions(request):
+    """Simulación completa de transacciones: una ronda en línea y otra en la caja.
+
+    Recorre todos los medios de pago, una cancelación, un vencimiento, una venta,
+    las operaciones de ventanilla con su cierre y las facturas (simuladas).
+    """
+    if request.method != "POST":
+        return redirect("simulation")
+    try:
+        report = simulate_transactions()
+    except (checkout.CheckoutError, cashier.CashierError) as exc:
+        messages.error(request, f"No se pudo simular: {exc}")
+        return redirect("simulation")
+    request.session["last_transaction_simulation"] = report.as_dicts()
+    failures = f", {report.failures} con error" if report.failures else ""
+    messages.success(
+        request, f"Simulación completa: {len(report.steps)} pasos y {report.invoices} facturas{failures}."
+    )
+    return redirect("simulation")
 
 
 def _advance(request, days):
