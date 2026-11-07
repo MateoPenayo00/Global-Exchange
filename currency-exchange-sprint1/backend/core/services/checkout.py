@@ -324,6 +324,7 @@ def _settle(order: PurchaseOrder, wallet: Wallet, option: PaymentOption) -> None
             pyg_amount=order.pyg_amount,
             rate_used=option.rate,
             note=f"Conversión para pagar la compra #{order.pk}",
+            purchase_order=order,
         )
         note = f"{tag} pagada con {_units(option.amount)} {option.currency.code}"
     elif option.kind == PurchaseOrder.PAY_CARD:
@@ -345,6 +346,7 @@ def _settle(order: PurchaseOrder, wallet: Wallet, option: PaymentOption) -> None
         pyg_amount=order.pyg_amount,
         rate_used=order.rate,
         note=note,
+        purchase_order=order,
     )
 
     order.status = PurchaseOrder.COMPLETED

@@ -294,6 +294,11 @@ class WalletTransaction(models.Model):
     payment_method = models.ForeignKey(
         PaymentMethod, on_delete=models.SET_NULL, null=True, blank=True, related_name="transactions"
     )
+    # La compra en línea que originó el movimiento (la compra y, si se pagó con otra
+    # divisa, su venta de conversión): la billetera enlaza su comprobante y su factura.
+    purchase_order = models.ForeignKey(
+        "PurchaseOrder", on_delete=models.SET_NULL, null=True, blank=True, related_name="wallet_transactions"
+    )
     amount = models.DecimalField(max_digits=18, decimal_places=6)
     pyg_amount = models.DecimalField(max_digits=18, decimal_places=2)
     rate_used = models.DecimalField(max_digits=18, decimal_places=6, null=True, blank=True)

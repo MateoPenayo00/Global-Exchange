@@ -3,11 +3,13 @@
 Se ejecutan con ``python manage.py test core.tests_invoicing``.
 """
 
+import importlib
 from datetime import timedelta
 from decimal import Decimal
 from unittest import mock
 
 import requests
+from django.apps import apps as django_apps
 from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Group
@@ -16,7 +18,7 @@ from django.utils import timezone
 
 from core import roles as role_lib
 from core.forms import InvoiceCustomerForm
-from core.models import BASE_CURRENCY_CODE, CashTransaction, Currency, Invoice, PurchaseOrder, Wallet
+from core.models import BASE_CURRENCY_CODE, CashTransaction, Currency, Invoice, PurchaseOrder, Wallet, WalletTransaction
 from core.services import cashier, factura_segura, invoicing
 from core.services.factura_segura import (
     ApiResponse,
@@ -27,7 +29,7 @@ from core.services.factura_segura import (
     calculate_de,
     check_digit,
 )
-from core.tests import buy, make_card, make_cashier, make_test_currency
+from core.tests import buy, buy_post, make_card, make_cashier, make_test_currency, order_id_from
 
 User = get_user_model()
 
@@ -435,6 +437,45 @@ class InvoiceViewTests(TestCase):
         payload = {"customer_name": "Ana Compra", "tax_id": "2595733-3", "customer_email": "ana@example.com"}
         payload.update(data)
         return self.client.post(f"/trade/checkout/{self.order.id}/factura/", payload)
+
+    def test_paying_opens_the_receipt_with_the_invoice_button(self):
+        order_id = order_id_from(self.client.post("/trade/", buy_post(self.currency, "8000")))
+        response = self.client.post(f"/trade/checkout/{order_id}/confirm/", {"payment_source": "balance"})
+        # Sin seguir el redirect, para que el mensaje de éxito llegue al comprobante.
+        self.assertRedirects(response, f"/trade/checkout/{order_id}/", fetch_redirect_response=False)
+        receipt = self.client.get(response.url)
+        self.assertContains(receipt, "Compraste")
+        self.assertContains(receipt, f"/trade/checkout/{order_id}/factura/")
+
+    def test_the_wallet_links_each_purchase_to_its_receipt_and_invoice(self):
+        wallet_page = self.client.get("/wallet/")
+        self.assertContains(wallet_page, f'href="/trade/checkout/{self.order.id}/"')
+        self.assertNotContains(wallet_page, ">Factura</a>")
+        self._request()
+        invoice = Invoice.objects.get()
+        self.assertContains(self.client.get("/wallet/"), f'href="/facturas/{invoice.id}/"')
+
+    def test_paying_with_another_currency_links_both_movements(self):
+        self.wallet.holdings.update_or_create(currency=self.currency, defaults={"amount": Decimal("10")})
+        other = Currency.objects.create(code="XTA", name="Otra", buy_rate=Decimal("4000"), sell_rate=Decimal("5000"))
+        order = paid_order(self.client, other, "20000", source=f"currency:{self.currency.id}")
+        kinds = set(order.wallet_transactions.values_list("kind", flat=True))
+        self.assertEqual(kinds, {WalletTransaction.BUY, WalletTransaction.SELL})
+
+    def test_the_migration_links_older_movements_from_their_note(self):
+        migration = importlib.import_module("core.migrations.0011_wallettransaction_purchase_order")
+        bought = self.order.wallet_transactions.get()
+        bought.purchase_order = None
+        bought.save(update_fields=["purchase_order"])
+        stranger, stranger_wallet = make_buyer("otro")
+        foreign = WalletTransaction.objects.create(
+            wallet=stranger_wallet, kind=WalletTransaction.BUY, amount=1, pyg_amount=1, note=f"Compra #{self.order.id} con saldo"
+        )
+        migration.link_existing_movements(django_apps, None)
+        bought.refresh_from_db()
+        foreign.refresh_from_db()
+        self.assertEqual(bought.purchase_order_id, self.order.id)
+        self.assertIsNone(foreign.purchase_order_id, "la nota de otra billetera no se enlaza")
 
     def test_the_paid_order_offers_an_invoice(self):
         response = self.client.get(f"/trade/checkout/{self.order.id}/")
