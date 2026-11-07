@@ -25,7 +25,9 @@ prefiriera facturar sólo el margen con IVA 10 %, alcanza con cambiar `ITEM_TAX`
 ítem en `services/invoicing.py`.
 
 La factura se emite **a pedido**: desde el comprobante de la compra (*Solicitar
-factura*) o de la operación de caja (*Emitir factura*). No es automática porque el
+factura*) o de la operación de caja (*Emitir factura*). Los dos comprobantes se abren
+solos al confirmar el pago; el de una compra anterior se abre desde *Mi billetera* →
+*Movimientos recientes* → **Compra #N**. No es automática porque el
 rango habilitado en TEST es de 12 números.
 
 ## 2. Datos habilitados para el equipo 10 (TEST)
@@ -161,7 +163,7 @@ Una factura ajena responde 404, no 403, para no revelar que existe.
 | `core/models.py` → `Invoice` | La factura: operación de origen, número, receptor, total, CDC, estado, y el JSON enviado y recibido (para auditar y depurar rechazos). |
 | `core/invoice_views.py` | Las pantallas de la tabla anterior. |
 | `core/management/commands/` | `factura_segura_token` y `actualizar_facturas`. |
-| `core/tests_invoicing.py` | 60 pruebas. |
+| `core/tests_invoicing.py` | 64 pruebas. |
 
 ## 8. Pruebas
 

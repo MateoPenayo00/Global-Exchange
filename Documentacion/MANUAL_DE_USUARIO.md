@@ -245,6 +245,11 @@ Los últimos 20 movimientos, con fecha, tipo (*Carga de saldo*, *Compra de divis
 *Venta de divisa*, *Retiro de divisa*), divisa, cantidad, equivalente en guaraníes,
 la cotización que se aplicó y con qué se pagó (una tarjeta o el saldo).
 
+En las compras, la columna **Operación** tiene el botón **Compra #N**, que abre el
+comprobante de esa compra (desde donde se pide la factura), y **Factura** si ya se
+emitió. La venta de conversión de una compra pagada con otra divisa lleva al mismo
+comprobante.
+
 ---
 
 ## 8. Comprar y vender (rol usuario)
@@ -305,9 +310,10 @@ divisa, la pantalla de pago se abre con esa divisa ya elegida como medio de pago
   con la misma divisa que se está comprando. Si no tenés tarjetas, la pantalla tiene
   un enlace a la billetera para agregar una.
 
-- **Confirmar pago** — cobra con el medio elegido, acredita la divisa y vuelve a
-  *Comprar y vender* con un mensaje que dice cuánto se compró, cuánto se pagó y a qué
-  precio.
+- **Confirmar pago** — cobra con el medio elegido, acredita la divisa y muestra el
+  **comprobante de la compra**, con un mensaje que dice cuánto se compró, cuánto se
+  pagó y a qué precio. Desde ahí: **Solicitar factura**, **Nueva compra** o **Ver
+  billetera**.
 - **Cancelar compra** — cierra la compra sin cobrar nada.
 
 Si salís de la pantalla de pago sin confirmar ni cancelar, la pestaña *Comprar y
@@ -356,9 +362,17 @@ Este bloque sólo aparece si hay divisas en la billetera.
 
 ### 8.3 Pedir la factura de una compra
 
-Una compra **pagada** se puede facturar. Al abrir la compra (desde el mensaje de
-confirmación, o desde *Facturas*), el comprobante tiene el botón **Solicitar
-factura**. Ver la sección 14.
+Una compra **pagada** se puede facturar con el botón **Solicitar factura** de su
+comprobante. Hay dos formas de llegar a él:
+
+- **Recién pagada:** el comprobante se abre solo al pulsar *Confirmar pago* (o al
+  volver de Stripe, cuando Stripe confirmó el cobro).
+- **Más tarde:** en **Mi billetera** → *Movimientos recientes*, cada compra tiene en
+  la columna *Operación* el botón **Compra #N**, que abre su comprobante. Si ya está
+  facturada, al lado aparece **Factura**.
+
+Una vez emitida, el comprobante muestra **Ver factura** en lugar de *Solicitar
+factura*. Ver la sección 14.
 
 ---
 
@@ -703,7 +717,9 @@ Para verificar que todo funciona de punta a punta, en unos cinco minutos:
 12. Si Stripe está configurado: comprar eligiendo **Tarjeta (Stripe)**, pagar en la
    página de Stripe con `4242 4242 4242 4242` (cualquier fecha futura y CVC) y volver.
    Tras unos segundos y una recarga, la compra figura como **Pagada**.
-13. Abrir una compra pagada y pulsar **Solicitar factura**. Escribir un RUC con un
+13. Al pagar cualquiera de las compras anteriores se abrió su comprobante; volver a
+   uno desde **Mi billetera** → *Movimientos recientes* → **Compra #N** y pulsar
+   **Solicitar factura**. Escribir un RUC con un
    dígito verificador equivocado (`2595733-4`): el formulario debe decir que es `3`.
    Corregirlo y emitir. La factura se abre con su número y su CDC; en **Facturas**
    aparece en la lista.

@@ -182,7 +182,7 @@ Global-Exchange/
             ├── tests.py            ← 207 pruebas del núcleo
             ├── tests_stripe.py     ← 14 pruebas del pago con Stripe
             ├── tests_notifications.py ← 14 pruebas de los avisos
-            ├── tests_invoicing.py  ← 60 pruebas de la facturación electrónica
+            ├── tests_invoicing.py  ← 64 pruebas de la facturación electrónica
             ├── tests_demo.py       ← 19 pruebas de la simulación completa de transacciones
             ├── migrations/         ← evolución del esquema
             ├── management/commands/ ← poblar_demo, factura_segura_token, actualizar_facturas
@@ -288,7 +288,10 @@ duplicados). `value_pyg` la valúa al precio de compra vigente.
 Registro de auditoría de toda operación. `kind` puede ser `deposit` (carga de
 saldo), `buy` (compra), `sell` (venta) o `withdraw` (retiro). Guarda la cantidad de
 divisa (`amount`), el equivalente en guaraníes (`pyg_amount`), la cotización
-aplicada (`rate_used`) y, si hubo tarjeta, cuál (`payment_method`).
+aplicada (`rate_used`), si hubo tarjeta, cuál (`payment_method`) y, si viene de una
+compra en línea, cuál (`purchase_order`). Ese enlace lo llevan la compra y, cuando
+se pagó con otra divisa, también su venta de conversión: es lo que permite que la
+billetera lleve al comprobante de cada compra y a su factura.
 
 ### `PurchaseOrder` — orden de compra
 
@@ -395,6 +398,7 @@ el `ProtectedError` y muestra un mensaje claro en lugar de un error 500.
 | `0008_stripe_payments` | Agrega `stripe_session_id` y `stripe_payment_intent` a `PurchaseOrder`, el medio `stripe` y crea `StripeEvent`. |
 | `0009_notification` | Crea `Notification`. |
 | `0010_invoice` | Crea `Invoice` con sus dos restricciones. |
+| `0011_wallettransaction_purchase_order` | Enlaza cada movimiento de la billetera con la compra que lo originó, y completa ese enlace en los movimientos existentes a partir de su nota (`Compra #N …`), sólo si la orden es de la misma billetera. |
 
 `0004` hace la transición de dólar a guaraní sin perder nada:
 
@@ -510,7 +514,7 @@ más reciente primero y calcula la variación porcentual del período con
 |-----|---------|----------|
 | `/trade/` | `trade` | Pizarra, formulario de compra (abre la orden) y formulario de venta. |
 | `/trade/checkout/<id>/` | `purchase_checkout` | Pantalla de pago de una orden, o su estado final si ya se cerró. Acepta `?pay=<clave>` para preseleccionar un medio de pago. |
-| `POST /trade/checkout/<id>/confirm/` | `purchase_confirm` | Cobra la orden con el medio de pago elegido (`payment_source`). |
+| `POST /trade/checkout/<id>/confirm/` | `purchase_confirm` | Cobra la orden con el medio de pago elegido (`payment_source`) y redirige a su comprobante, que ofrece *Solicitar factura*. |
 | `POST /trade/checkout/<id>/cancel/` | `purchase_cancel` | Cancela la orden sin mover saldo. |
 | `/trade/checkout/<id>/factura/` | `invoice_views.order_invoice` | Solicitar la factura de una compra pagada (ver *Facturas*). |
 | `POST /stripe/webhook/` | `stripe_webhook` | Aviso de Stripe. Sin sesión ni CSRF: lo autentica la firma `Stripe-Signature`. 400 si la firma no es válida, 503 si Stripe no está configurado. |
@@ -1006,14 +1010,14 @@ forma fiable combinado con `alias`.
 
 ## 8. Pruebas
 
-**314 pruebas unitarias, todas en verde**, en cinco archivos:
+**318 pruebas unitarias, todas en verde**, en cinco archivos:
 
 | Archivo | Pruebas | Qué cubre |
 |---------|---------|-----------|
 | `tests.py` | 207 | El núcleo: roles, divisas, billetera, compra y venta, pantalla de pago, simulación, historial, caja (detalle abajo). |
 | `tests_stripe.py` | 14 | Stripe se ofrece sólo con clave, nunca se confirma desde el navegador, la redirección y la sesión, firma inválida (400), sin secreto (503), sólo `POST`, el evento completa la orden, un reenvío no acredita dos veces, sesión no pagada, eventos ignorados, orden desconocida y el reembolso de un pago tardío. |
 | `tests_notifications.py` | 14 | Un aviso por cliente y ninguno para otros roles, sin aviso si no cambió, para el guaraní o una divisa inactiva; editar avisa, crear no; una semana avisa una vez por divisa; el listado, el contador, marcar uno o todos y que no se pueda marcar uno ajeno. |
-| `tests_invoicing.py` | 60 | Los cálculos del SIFEN reproducen el ejemplo del manual de Factura Segura y su CDC; dígito verificador del RUC; el formulario del receptor; emisión simulada y real (con el API reemplazado), numeración y rango agotado, reintento con el mismo número, timeout sin confirmar, estados del SIFEN, cancelación, caja, pantallas, permisos, descargas y el protocolo HTTP. |
+| `tests_invoicing.py` | 64 | Al pagar se abre el comprobante con *Solicitar factura* y la billetera enlaza cada compra y su factura (incluido el enlace de los movimientos viejos que hace la migración `0011`); los cálculos del SIFEN reproducen el ejemplo del manual de Factura Segura y su CDC; dígito verificador del RUC; el formulario del receptor; emisión simulada y real (con el API reemplazado), numeración y rango agotado, reintento con el mismo número, timeout sin confirmar, estados del SIFEN, cancelación, caja, pantallas, permisos, descargas y el protocolo HTTP. |
 | `tests_demo.py` | 19 | La simulación completa: ningún paso falla, cada medio de pago completa una compra, Stripe pasa por el manejador del webhook, cancelación y vencimiento, la caja cierra y cuadra, se factura lo que corresponde sin tocar el rango real; el comando `poblar_demo` (idempotente y con `--force`), el botón del panel y el servicio de venta. |
 
 ```bash
@@ -1251,9 +1255,9 @@ automático en los ambientes de desarrollo y producción.
 
 | Rama | Story points (estimados) | Estado | Pendiente |
 |------|--------------------------|--------|-----------|
-| `FX-23` Facturación electrónica | 13 | Terminada, con 60 pruebas | Emitir la primera factura real contra Factura Segura TEST: falta el token del usuario ESI (la habilitación no incluye la contraseña). |
+| `FX-23` Facturación electrónica | 13 | Terminada, con 64 pruebas | Emitir la primera factura real contra Factura Segura TEST: falta el token del usuario ESI (la habilitación no incluye la contraseña). |
 | `FX-24` Simulación completa de transacciones | 5 | Terminada, con 19 pruebas | — |
-| `FX-25` Script de despliegue | 8 | Terminado. Desarrollo probado de punta a punta (incluidas las 314 pruebas dentro del contenedor desplegado); en producción se verificaron por separado Keycloak en modo producción y Django sin `DEBUG` (`check --deploy`) | Una corrida completa de `deploy.sh prod` con secretos propios. |
+| `FX-25` Script de despliegue | 8 | Terminado. Desarrollo probado de punta a punta (incluidas todas las pruebas dentro del contenedor desplegado); en producción se verificaron por separado Keycloak en modo producción y Django sin `DEBUG` (`check --deploy`) | Una corrida completa de `deploy.sh prod` con secretos propios. |
 | `FX-26` Documentación | 3 | Terminada | Cargar en Jira la planificación del Sprint 6 (ver abajo). |
 
 Release: tag `v0.5` sobre `main` al integrar las cuatro ramas.

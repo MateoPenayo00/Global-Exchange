@@ -26,7 +26,7 @@ Las secciones 2 a 9 cuentan los Sprints 1 a 3; la sección 10, el Sprint 5.
 | **Qué aportó la IA** | Implementación, migraciones de base de datos, pruebas unitarias, documentación y depuración. |
 | **Qué siguió siendo del equipo** | La definición de los objetivos del sprint, las decisiones de producto, la priorización y la validación de los resultados. |
 | **Resultado del Sprint 3** | 8 objetivos cumplidos, 98 pruebas unitarias en verde, documentación reducida de 18 archivos dispersos a 4 documentos. |
-| **Resultado del Sprint 5** | Los 3 puntos de alcance del Hito 7 implementados en 4 ramas, 79 pruebas nuevas (314 en total, en verde) y la documentación actualizada con lo que habían integrado los compañeros (Stripe, avisos, Sphinx). Ver la sección 10. |
+| **Resultado del Sprint 5** | Los 3 puntos de alcance del Hito 7 implementados en 4 ramas, 83 pruebas nuevas (318 en total, en verde) y la documentación actualizada con lo que habían integrado los compañeros (Stripe, avisos, Sphinx). Ver la sección 10. |
 
 La conclusión corta: **la IA aceleró mucho la ejecución, pero no reemplazó la decisión
 de qué construir ni la responsabilidad de verificar que esté bien.** Cada vez que el
@@ -423,9 +423,9 @@ pruebas existentes como línea de base: 235 en verde.
 
 | Rama | Qué hizo la IA |
 |------|----------------|
-| `FX-23` | Leyó el manual de Factura Segura entero (protocolo, siete operaciones, estructura del DE, reglas para interpretar los estados del SIFEN) y el correo de habilitación. Implementó el cliente del API, el modelo `Invoice`, la emisión, los estados y las pantallas, con 60 pruebas. |
+| `FX-23` | Leyó el manual de Factura Segura entero (protocolo, siete operaciones, estructura del DE, reglas para interpretar los estados del SIFEN) y el correo de habilitación. Implementó el cliente del API, el modelo `Invoice`, la emisión, los estados y las pantallas, con 60 pruebas (64 después de la corrección de la sección 10.5). |
 | `FX-24` | Extrajo la venta y la carga de saldo de las vistas a `services/checkout.py` y escribió `services/demo.py`, que recorre todo el ciclo con los servicios reales; luego el botón del panel y el comando `poblar_demo`, con 19 pruebas. |
-| `FX-25` | Escribió `deploy.sh` y los dos archivos de ambiente, y **corrió el despliegue de desarrollo de punta a punta** sobre el stack del equipo (migraciones, datos de demostración y las 314 pruebas dentro del contenedor desplegado). |
+| `FX-25` | Escribió `deploy.sh` y los dos archivos de ambiente, y **corrió el despliegue de desarrollo de punta a punta** sobre el stack del equipo (migraciones, datos de demostración y la suite completa dentro del contenedor desplegado). |
 | `FX-26` | Esta documentación, la planificación del Sprint 6 y el CSV para Jira. |
 
 Cada rama salió de la anterior (son dependientes: la simulación factura y el
@@ -488,6 +488,17 @@ venía usando el equipo (`Área: descripción`).
   una carpeta vacía) quedaron con dueño `root`. Se corrigió el dueño, y el problema
   terminó cambiando el diseño del ambiente de desarrollo: los estáticos se recolectan
   fuera de la carpeta montada, para que el ambiente no ensucie el repositorio.
+- **Un botón al que no se podía llegar.** *Solicitar factura* quedó en el comprobante
+  de la compra, pero después de pagar la aplicación volvía a *Comprar y vender* y
+  ninguna pantalla enlazaba las compras anteriores: el botón sólo se veía escribiendo
+  la dirección a mano (o al volver de Stripe). Las pruebas no lo detectaron porque
+  abrían el comprobante directamente por su URL, y el manual decía que se llegaba
+  "desde el mensaje de confirmación", lo cual era falso. **Lo encontró el equipo al
+  probar la compra en el navegador.** Se corrigió abriendo el comprobante al pagar,
+  enlazando cada compra desde los movimientos de la billetera (con una migración que
+  completa el enlace en los movimientos existentes) y con pruebas que recorren el
+  camino como lo hace un usuario. Es el mismo hueco que la sección 5 ya señalaba:
+  probar el servidor no es lo mismo que mirar la pantalla.
 - **Formato de montos.** El primer reporte de la simulación mostraba
   `2.157.050,00 PYG` en lugar de `Gs. 2.157.050`. Lo mostró la primera corrida real del
   despliegue; ninguna prueba miraba ese texto.
