@@ -67,6 +67,8 @@
                   <span class="coin coin-base" aria-hidden="true">Gs.</span>
                 {% elif option.kind == 'card' %}
                   <span class="coin coin-card" aria-hidden="true">{{ option.card.last4 }}</span>
+                {% elif option.kind == 'stripe' %}
+                  <span class="coin coin-card" aria-hidden="true">Stripe</span>
                 {% else %}
                   <span class="coin coin-card" aria-hidden="true">QR</span>
                 {% endif %}
@@ -119,8 +121,7 @@
           </p>
 
           <div class="btn-group checkout-actions">
-            <button class="btn btn-primary" type="submit" id="confirm-button">Confirmar pago</button>
-            <button class="btn btn-danger" type="submit" formaction="{% url 'purchase_cancel' order.id %}"
+            <button class="btn btn-primary" type="submit" id="confirm-button">Confirmar pago</button>            <button class="btn btn-danger" type="submit" formaction="{% url 'purchase_cancel' order.id %}"
                     formnovalidate id="cancel-button">Cancelar compra</button>
           </div>
         </form>
@@ -153,6 +154,7 @@
           {% if order.payment_kind == 'balance' %}Pagada con tu saldo en guaraníes.
           {% elif order.payment_kind == 'currency' %}Pagada con {{ order.paid_amount|units }} {{ order.paid_currency.code }} de tu billetera, convertidos a guaraníes al precio congelado.
           {% elif order.payment_kind == 'card' %}Pagada con tarjeta{% if order.payment_method %} {{ order.payment_method.masked_number }}{% endif %}.
+          {% elif order.payment_kind == 'stripe' %}Pagada con tarjeta a través de Stripe.
           {% else %}Pagada con código QR (referencia {{ order.qr_reference }}).{% endif %}
           Fecha: {{ order.closed_at|date:"d/m/Y H:i" }}.
         </p>
@@ -166,6 +168,13 @@
       {% endif %}
 
       <div class="btn-group">
+        {% if order.status == 'completed' %}
+          {% if order.invoice and not order.invoice.can_retry %}
+            <a class="btn btn-accent" href="{% url 'invoice_detail' order.invoice.id %}">Ver factura {{ order.invoice.full_number }}</a>
+          {% else %}
+            <a class="btn btn-accent" href="{% url 'order_invoice' order.id %}">{% if order.invoice %}Reenviar factura{% else %}Solicitar factura{% endif %}</a>
+          {% endif %}
+        {% endif %}
         <a class="btn btn-primary" href="{% url 'trade' %}?currency={{ order.currency.id }}#comprar">Nueva compra</a>
         <a class="btn btn-secondary" href="{% url 'wallet' %}">Ver billetera</a>
       </div>

@@ -61,6 +61,7 @@ TEMPLATES = [
                 "django.contrib.auth.context_processors.auth",
                 "django.contrib.messages.context_processors.messages",
                 "core.context_processors.roles",
+                "core.context_processors.unread_notifications",
             ],
         },
     },
@@ -95,7 +96,8 @@ LOCALE_PATHS = [BASE_DIR / "locale"]
 
 STATIC_URL = "/static/"
 STATICFILES_DIRS = [BASE_DIR / "static"]
-STATIC_ROOT = BASE_DIR / "staticfiles"
+# El ambiente de desarrollo monta el código en /app y deja los estáticos fuera de él.
+STATIC_ROOT = Path(os.getenv("DJANGO_STATIC_ROOT", BASE_DIR / "staticfiles"))
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
@@ -110,6 +112,51 @@ KEYCLOAK_CLIENT_ID = os.getenv("KEYCLOAK_CLIENT_ID", "exchange-web")
 KEYCLOAK_CLIENT_SECRET = os.getenv("KEYCLOAK_CLIENT_SECRET", "change-me-web-secret")
 KEYCLOAK_ADMIN_CLIENT_ID = os.getenv("KEYCLOAK_ADMIN_CLIENT_ID", "exchange-admin-api")
 KEYCLOAK_ADMIN_CLIENT_SECRET = os.getenv("KEYCLOAK_ADMIN_CLIENT_SECRET", "change-me-admin-secret")
+
+# Stripe (modo de prueba en desarrollo). Sin STRIPE_SECRET_KEY el medio de pago
+# "Tarjeta (Stripe)" no se ofrece en la pantalla de pago.
+STRIPE_SECRET_KEY = os.getenv("STRIPE_SECRET_KEY", "")
+STRIPE_PUBLISHABLE_KEY = os.getenv("STRIPE_PUBLISHABLE_KEY", "")
+STRIPE_WEBHOOK_SECRET = os.getenv("STRIPE_WEBHOOK_SECRET", "")
+# El guaraní es una moneda sin decimales en Stripe: el monto se envía en unidades enteras.
+STRIPE_CURRENCY = os.getenv("STRIPE_CURRENCY", "pyg").lower()
+
+# Facturación electrónica con Factura Segura (ambiente TEST por defecto). Sin
+# FACTURA_SEGURA_TOKEN las facturas se emiten en modo simulado: se numeran y se
+# muestran, pero no se envían a Factura Segura ni al SIFEN.
+FACTURA_SEGURA_URL = os.getenv("FACTURA_SEGURA_URL", "https://apitest.facturasegura.com.py").rstrip("/")
+FACTURA_SEGURA_TOKEN = os.getenv("FACTURA_SEGURA_TOKEN", "")
+# Sólo los usa el comando ``factura_segura_token`` para obtener el token.
+FACTURA_SEGURA_EMAIL = os.getenv("FACTURA_SEGURA_EMAIL", "")
+FACTURA_SEGURA_PASSWORD = os.getenv("FACTURA_SEGURA_PASSWORD", "")
+FACTURA_SEGURA_TIMEOUT = int(os.getenv("FACTURA_SEGURA_TIMEOUT", "30"))
+
+# Datos del emisor y rango de numeración autorizado. Los valores por defecto son
+# los que Factura Segura habilitó para el equipo 10 en TEST.
+INVOICE_EMITTER = {
+    "ruc": os.getenv("FACTURA_RUC", "2595733"),
+    "dv": os.getenv("FACTURA_RUC_DV", "3"),
+    "taxpayer_type": os.getenv("FACTURA_TIPO_CONTRIBUYENTE", "1"),  # 1 persona física, 2 jurídica
+    "name": os.getenv("FACTURA_RAZON_SOCIAL", "Exchange Pro - Equipo 10 IS2"),
+    "address": os.getenv("FACTURA_DIRECCION", "Campus Universitario, San Lorenzo"),
+    "house_number": os.getenv("FACTURA_NUMERO_CASA", "0"),
+    "department_code": os.getenv("FACTURA_DEPARTAMENTO", "1"),
+    "department": os.getenv("FACTURA_DEPARTAMENTO_DESC", "CAPITAL"),
+    "city_code": os.getenv("FACTURA_CIUDAD", "1"),
+    "city": os.getenv("FACTURA_CIUDAD_DESC", "ASUNCION (DISTRITO)"),
+    "phone": os.getenv("FACTURA_TELEFONO", "(021)000000"),
+    "email": os.getenv("FACTURA_EMAIL", "facturacion@exchangepro.local"),
+    "stamp": os.getenv("FACTURA_TIMBRADO", ""),
+    "stamp_start": os.getenv("FACTURA_TIMBRADO_INICIO", ""),
+    "establishment": os.getenv("FACTURA_ESTABLECIMIENTO", "001"),
+    "expedition_point": os.getenv("FACTURA_PUNTO_EXPEDICION", "003"),
+    "first_number": int(os.getenv("FACTURA_NUMERO_DESDE", "314")),
+    "last_number": int(os.getenv("FACTURA_NUMERO_HASTA", "325")),
+    "activities": [
+        {"cActEco": "62010", "dDesActEco": "Actividades de programación informática"},
+        {"cActEco": "74909", "dDesActEco": "Otras actividades profesionales, científicas y técnicas n.c.p."},
+    ],
+}
 
 OIDC_RP_CLIENT_ID = KEYCLOAK_CLIENT_ID
 OIDC_RP_CLIENT_SECRET = KEYCLOAK_CLIENT_SECRET

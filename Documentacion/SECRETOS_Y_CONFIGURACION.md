@@ -4,8 +4,9 @@ Todo lo que el proyecto necesita como credencial o parámetro de entorno: qué e
 valor, qué protege, qué pasa si se filtra y cómo cambiarlo.
 
 Documentos hermanos: `DOCUMENTACION_TECNICA.md` (cómo está construido el sistema),
-`MANUAL_DE_USUARIO.md` (cómo se usa el sitio) y `COLABORACION_CON_IA.md` (cómo se usó
-asistencia de IA en el desarrollo).
+`MANUAL_DE_USUARIO.md` (cómo se usa el sitio), `DESPLIEGUE.md` (el script de
+despliegue), `STRIPE.md` y `FACTURACION_ELECTRONICA.md` (los dos servicios externos) y
+`COLABORACION_CON_IA.md` (cómo se usó asistencia de IA en el desarrollo).
 
 ---
 
@@ -25,7 +26,12 @@ Reglas que el proyecto ya respeta y conviene no romper:
 - **Ningún secreto está escrito en el código.** `settings.py` y `docker-compose.yml`
   leen variables de entorno; `keycloak/realm-export.json` usa valores de ejemplo.
 - **El número completo de las tarjetas de crédito no se guarda.** Se valida y se
-  descarta; sólo quedan los últimos cuatro dígitos, la marca y el vencimiento.
+  descarta; sólo quedan los últimos cuatro dígitos, la marca y el vencimiento. Con
+  Stripe el número ni siquiera pasa por la aplicación: se escribe en la página de
+  Stripe.
+- **Las credenciales de los servicios externos no se versionan.** El correo de
+  habilitación de Factura Segura (`Factura Segura Credenciales.txt`) queda excluido
+  por el `.gitignore` de la raíz; su token y las claves de Stripe van sólo en `.env`.
 
 ---
 
@@ -78,6 +84,13 @@ Luego:
 ```bash
 docker compose up -d --build
 ```
+
+O, más simple, `./scripts/deploy.sh prod`: si no existe `.env` lo crea y, en una
+instalación nueva, genera solo `DJANGO_SECRET_KEY`, `POSTGRES_PASSWORD`,
+`KEYCLOAK_DB_PASSWORD` y `KEYCLOAK_ADMIN_PASSWORD`. En producción se niega a desplegar
+si alguno de esos cuatro sigue con el valor de ejemplo (ver `DESPLIEGUE.md`). Los
+secretos de los clientes de Keycloak no los puede generar: tienen que coincidir con
+Keycloak.
 
 ---
 
@@ -150,6 +163,50 @@ consola.
 **Recomendación.** Tratarlo con el mismo cuidado que `KEYCLOAK_ADMIN_PASSWORD`, ya
 que concede permisos equivalentes sobre los usuarios.
 
+### `STRIPE_SECRET_KEY`, `STRIPE_PUBLISHABLE_KEY` y `STRIPE_WEBHOOK_SECRET`
+
+**Qué protegen.** La clave secreta (`sk_test_…`) permite a la aplicación crear
+sesiones de pago y reembolsos en la cuenta de Stripe del equipo. El secreto del
+webhook (`whsec_…`) es el que prueba que un aviso de pago viene de Stripe: sin una
+firma válida el webhook responde 400 y no acredita nada. La clave publicable no es
+secreta.
+
+**Si se filtran.** Con la clave secreta se puede operar sobre la cuenta de Stripe
+(en modo de prueba no mueve dinero real, pero igual hay que rotarla). Con el secreto
+del webhook se podrían fabricar avisos de pago y acreditar divisas sin cobrar.
+
+**Cómo se obtienen.** Las claves en el *Dashboard* de Stripe → *Developers* → *API
+keys* (siempre las de **modo de prueba**). El secreto del webhook lo imprime `stripe
+listen --forward-to localhost/stripe/webhook/` en desarrollo, o el endpoint creado
+en el *Dashboard* en un servidor. Ver `STRIPE.md`.
+
+**Sin `STRIPE_SECRET_KEY`** el medio de pago *Tarjeta (Stripe)* simplemente no se
+ofrece.
+
+### `FACTURA_SEGURA_TOKEN` (y el usuario ESI)
+
+**Qué protege.** Es el *Authentication-Token* del usuario ESI de Factura Segura: con
+él la aplicación genera, consulta y cancela documentos electrónicos **en nombre del
+emisor** habilitado (RUC 2595733 en TEST). Vale hasta que se cambie la contraseña del
+usuario ESI.
+
+**Si se filtra.** Cualquiera podría emitir o cancelar documentos a nombre del emisor
+y gastar el rango de numeración del equipo (12 facturas en TEST). Se revoca cambiando
+la contraseña en el portal de Factura Segura.
+
+**Cómo se obtiene.**
+
+```bash
+docker compose exec web python manage.py factura_segura_token --email <correo ESI>
+```
+
+Pide la contraseña sin mostrarla (o la toma de `FACTURA_SEGURA_PASSWORD`, que conviene
+**no** dejar en `.env` después) e imprime la línea para `.env`.
+
+**Sin token** las facturas se emiten en modo simulado: no salen de la aplicación. El
+resto de las variables `FACTURA_*` (RUC, establecimiento, punto de expedición, rango,
+timbrado) no son secretas; están en `FACTURACION_ELECTRONICA.md`.
+
 ---
 
 ## 5. Contraseñas de las cuentas de demostración
@@ -201,6 +258,12 @@ redirecciones del navegador fallan aunque todos los secretos estén bien.
 | `KEYCLOAK_PUBLIC_URL` | `http://192.168.100.13` | URL de Keycloak para el **navegador**. |
 | `KEYCLOAK_INTERNAL_URL` | `http://keycloak:8080` | URL de Keycloak para las llamadas **de Django**. |
 | `KEYCLOAK_HOSTNAME` | `192.168.100.13` | Host que Keycloak considera propio. |
+| `STRIPE_CURRENCY` | `pyg` | Moneda de los cobros de Stripe. El guaraní no tiene decimales: el monto va en unidades enteras. |
+| `FACTURA_SEGURA_URL` | `https://apitest.facturasegura.com.py` | API de Factura Segura. Producción: `https://api.facturasegura.com.py`. |
+| `FACTURA_RUC` / `FACTURA_RUC_DV` | `2595733` / `3` | Emisor habilitado para el equipo en TEST. |
+| `FACTURA_ESTABLECIMIENTO` / `FACTURA_PUNTO_EXPEDICION` | `001` / `003` | Parte fija del número de factura. |
+| `FACTURA_NUMERO_DESDE` / `FACTURA_NUMERO_HASTA` | `314` / `325` | Rango de numeración autorizado. Al agotarse, la emisión se rechaza. |
+| `FACTURA_TIMBRADO` / `FACTURA_TIMBRADO_INICIO` | vacíos | Sólo si Factura Segura los exige. |
 
 ### Por qué hay dos URLs de Keycloak
 
@@ -224,11 +287,8 @@ puede servir para ambas cosas. El detalle completo está en la sección 2 de
 | `keycloak/realm-export.json` | Realm, clientes, roles y usuarios de demo, con secretos de ejemplo. | Sí. |
 | `backend/Dockerfile` | Sólo el entorno de ejecución. Ningún secreto queda dentro de la imagen. | Sí. |
 | `backend/.dockerignore` | Evita que `.env` y `.git` se copien a la imagen. | Sí. |
-
-> **Pendiente de limpieza:** en `currency-exchange-sprint1/` quedó un archivo
-> `..env.swp`, un swap de Vim de una edición interrumpida de `.env`. No lo usa nadie
-> y puede contener fragmentos del `.env`. Conviene borrarlo y comprobar que no esté
-> versionado.
+| `docker-compose.dev.yml` / `docker-compose.prod.yml` | Ajustes de cada ambiente; ningún secreto. | Sí. |
+| `Factura Segura Credenciales.txt` (raíz) | El correo de habilitación de Factura Segura. | **No** (`.gitignore` de la raíz). |
 
 ---
 
@@ -246,7 +306,9 @@ Si el proyecto va a dejar de correr sólo en `localhost`:
 - [ ] HTTPS configurado y `DJANGO_SECURE_SSL_REDIRECT`,
       `DJANGO_SESSION_COOKIE_SECURE` y `DJANGO_CSRF_COOKIE_SECURE` en `1`.
 - [ ] `.env` fuera del repositorio (`git status` no debe mencionarlo).
-- [ ] `..env.swp` eliminado.
+- [ ] Claves de Stripe y token de Factura Segura sólo en `.env`; `FACTURA_SEGURA_PASSWORD`
+      vacío una vez obtenido el token.
+- [ ] `./scripts/deploy.sh prod` corre sin `--insecure`.
 - [ ] Los puertos de PostgreSQL no publicados al exterior (hoy no lo están: sólo
       Nginx expone el puerto 80).
 
@@ -262,3 +324,7 @@ Si el proyecto va a dejar de correr sólo en `localhost`:
 | La pestaña *Usuarios* da error de Keycloak | `KEYCLOAK_ADMIN_CLIENT_SECRET` desincronizado, o la cuenta de servicio perdió el rol `realm-admin`. |
 | El contenedor `web` se reinicia en bucle | Casi siempre las variables `POSTGRES_*`. Revisar con `docker compose logs web`. |
 | Cambié `.env` y no pasó nada | Faltó `docker compose up -d` para recrear los contenedores. |
+| El webhook de Stripe responde 400 | `STRIPE_WEBHOOK_SECRET` no corresponde al `stripe listen` (o al endpoint) que está enviando los avisos. |
+| El webhook de Stripe responde 503 | Falta `STRIPE_SECRET_KEY` o `STRIPE_WEBHOOK_SECRET`. |
+| Las facturas salen "simuladas" | Falta `FACTURA_SEGURA_TOKEN`, o se cambió `.env` sin recrear el contenedor. |
+| "Factura Segura rechazó el token" | El token se invalidó (se cambió la contraseña del usuario ESI). Volver a correr `factura_segura_token`. |

@@ -1,0 +1,32 @@
+# Ambiente de PRODUCCIÓN (se combina con docker-compose.yml):
+#
+#   docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
+#   o simplemente:  ./scripts/deploy.sh prod
+#
+# El código va dentro de la imagen (no se monta nada), Django corre sin DEBUG con
+# varios workers, Keycloak arranca en modo producción y todo se reinicia solo si
+# se cae o si se reinicia la máquina.
+services:
+  db:
+    restart: always
+
+  keycloak-db:
+    restart: always
+
+  keycloak:
+    restart: always
+    # Modo producción: detrás de nginx, por HTTP, aceptando el host que llega en
+    # X-Forwarded-Host (la app se usa por localhost o por la IP de la red local).
+    command: start --http-enabled=true --hostname-strict=false --import-realm
+
+  web:
+    restart: always
+    environment:
+      DJANGO_DEBUG: "0"
+    command: >-
+      sh -c "python manage.py migrate --noinput
+      && python manage.py collectstatic --noinput
+      && gunicorn config.wsgi:application --bind 0.0.0.0:8000 --workers 3 --timeout 60 --access-logfile -"
+
+  nginx:
+    restart: always

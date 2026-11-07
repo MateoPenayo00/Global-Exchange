@@ -46,6 +46,40 @@
       </p>
     </section>
 
+    <section class="card">
+      <div class="card-head row-between">
+        <h2 class="hexed">Simulación completa de transacciones</h2>
+        <form method="post" action="{% url 'simulation_transactions' %}">
+          {% csrf_token %}
+          <button class="btn btn-primary" type="submit">Simular transacciones</button>
+        </form>
+      </div>
+      <p class="muted">
+        Ejecuta, con los usuarios de demostración y las cotizaciones de hoy, todo el ciclo de las operaciones:
+        carga de saldo, compras pagadas con saldo, tarjeta, otra divisa, QR y Stripe (confirmada por el webhook),
+        una compra cancelada, otra vencida, una venta, una sesión de caja completa con su cierre y las facturas
+        electrónicas. Las facturas son simuladas: no consumen el rango de Factura Segura.
+      </p>
+
+      {% if last_transactions %}
+        <div class="scroll-x" style="margin-top:16px">
+          <table>
+            <thead><tr><th>Dónde</th><th>Paso</th><th>Resultado</th><th></th></tr></thead>
+            <tbody>
+              {% for step in last_transactions %}
+                <tr>
+                  <td class="muted">{{ step.area }}</td>
+                  <td>{{ step.action }}</td>
+                  <td>{% if not step.ok %}<span class="tag tag-down">Error</span> {% endif %}{{ step.outcome }}</td>
+                  <td class="table-actions">{% if step.url %}<a class="btn btn-secondary btn-sm" href="{{ step.url }}">Ver</a>{% endif %}</td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      {% endif %}
+    </section>
+
     {% if last_changes %}
       <section class="card">
         <div class="card-head row-between">

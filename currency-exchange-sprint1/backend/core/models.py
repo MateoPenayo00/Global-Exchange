@@ -294,6 +294,11 @@ class WalletTransaction(models.Model):
     payment_method = models.ForeignKey(
         PaymentMethod, on_delete=models.SET_NULL, null=True, blank=True, related_name="transactions"
     )
+    # La compra en línea que originó el movimiento (la compra y, si se pagó con otra
+    # divisa, su venta de conversión): la billetera enlaza su comprobante y su factura.
+    purchase_order = models.ForeignKey(
+        "PurchaseOrder", on_delete=models.SET_NULL, null=True, blank=True, related_name="wallet_transactions"
+    )
     amount = models.DecimalField(max_digits=18, decimal_places=6)
     pyg_amount = models.DecimalField(max_digits=18, decimal_places=2)
     rate_used = models.DecimalField(max_digits=18, decimal_places=6, null=True, blank=True)
@@ -344,12 +349,14 @@ class PurchaseOrder(models.Model):
     PAY_CURRENCY = "currency"
     PAY_CARD = "card"
     PAY_QR = "qr"
+    PAY_STRIPE = "stripe"
 
     PAYMENT_KIND_CHOICES = [
         (PAY_BALANCE, "Saldo en guaraníes"),
         (PAY_CURRENCY, "Otra divisa de la billetera"),
         (PAY_CARD, "Tarjeta de crédito"),
         (PAY_QR, "Código QR"),
+        (PAY_STRIPE, "Tarjeta (Stripe)"),
     ]
 
     wallet = models.ForeignKey(Wallet, on_delete=models.CASCADE, related_name="purchase_orders")
@@ -368,6 +375,10 @@ class PurchaseOrder(models.Model):
     )
     paid_amount = models.DecimalField(max_digits=18, decimal_places=6, null=True, blank=True)
     qr_reference = models.CharField(max_length=40, blank=True)
+    # Datos del pago con Stripe: la sesión de Checkout que se abrió y, una vez
+    # cobrado, el PaymentIntent (sirve para reembolsar o auditar).
+    stripe_session_id = models.CharField(max_length=120, blank=True)
+    stripe_payment_intent = models.CharField(max_length=120, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     expires_at = models.DateTimeField()
     closed_at = models.DateTimeField(null=True, blank=True)
@@ -402,6 +413,31 @@ class PurchaseOrder(models.Model):
         """Precio de compra congelado de ``currency``, o ``None`` si no se congeló."""
         value = self.frozen_rates.get(currency.code)
         return Decimal(value) if value is not None else None
+
+
+class StripeEvent(models.Model):
+    """Evento de webhook de Stripe ya procesado.
+
+    Stripe reenvía un evento si no recibe un 200 a tiempo, así que el mismo
+    ``event_id`` puede llegar más de una vez. Guardarlo (con restricción de
+    unicidad) permite ignorar los repetidos y no acreditar dos veces la misma compra.
+    """
+
+    event_id = models.CharField(max_length=120, unique=True)
+    event_type = models.CharField(max_length=80)
+    order = models.ForeignKey(
+        PurchaseOrder, on_delete=models.SET_NULL, null=True, blank=True, related_name="stripe_events"
+    )
+    outcome = models.CharField(max_length=40, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        verbose_name = "evento de Stripe"
+        verbose_name_plural = "eventos de Stripe"
+
+    def __str__(self):
+        return f"{self.event_type} · {self.event_id}"
 
 
 # --- Caja física ----------------------------------------------------------
@@ -592,3 +628,176 @@ class CashTransaction(models.Model):
         if not self.is_pending:
             return 0
         return max(0, int((self.expires_at - (now or timezone.now())).total_seconds()))
+
+
+# --- Notificaciones -------------------------------------------------------
+
+
+class Notification(models.Model):
+    """Aviso a un cliente de que cambió la cotización de una divisa.
+
+    Guarda las cotizaciones de antes y de después para poder mostrar el cambio
+    sin consultar el historial. ``read_at`` vale ``None`` mientras no se lee.
+    """
+
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="notifications")
+    currency = models.ForeignKey(Currency, on_delete=models.CASCADE, related_name="notifications")
+    previous_buy = models.DecimalField(max_digits=18, decimal_places=6)
+    previous_sell = models.DecimalField(max_digits=18, decimal_places=6)
+    new_buy = models.DecimalField(max_digits=18, decimal_places=6)
+    new_sell = models.DecimalField(max_digits=18, decimal_places=6)
+    created_at = models.DateTimeField(auto_now_add=True)
+    read_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ["-created_at", "-id"]
+        verbose_name = "notificación"
+        verbose_name_plural = "notificaciones"
+
+    def __str__(self):
+        return f"{self.currency.code}: {self.previous_sell} -> {self.new_sell} ({self.user})"
+
+    @property
+    def is_read(self) -> bool:
+        return self.read_at is not None
+
+    @property
+    def went_up(self) -> bool:
+        return self.new_sell > self.previous_sell
+
+
+# --- Facturación electrónica ----------------------------------------------
+
+
+class Invoice(models.Model):
+    """Factura electrónica de una operación, emitida a través de Factura Segura.
+
+    Se factura la **venta de divisas al cliente**: una compra en línea pagada
+    (``purchase_order``) o una operación de caja en la que el cliente recibe
+    divisa extranjera (``cash_transaction``). Cada factura apunta a exactamente
+    una de las dos.
+
+    El número (``number``, siete dígitos) se reserva al crear la factura y no se
+    libera aunque el envío falle: un reintento reutiliza el mismo número, para no
+    gastar el rango autorizado ni arriesgar dos documentos con el mismo número.
+
+    ``is_simulated`` distingue las facturas que nunca salieron de la aplicación
+    (sin token de Factura Segura, o datos de demostración). Tienen su propia
+    numeración, que no consume el rango real.
+    """
+
+    ERROR = "error"
+    UNCONFIRMED = "unconfirmed"
+    PROCESSING = "processing"
+    APPROVED = "approved"
+    REJECTED = "rejected"
+    CANCELLED = "cancelled"
+    VOIDED = "voided"
+
+    STATUS_CHOICES = [
+        (ERROR, "No se pudo generar"),
+        (UNCONFIRMED, "Sin confirmar"),
+        (PROCESSING, "En proceso en el SIFEN"),
+        (APPROVED, "Aprobada"),
+        (REJECTED, "Rechazada por el SIFEN"),
+        (CANCELLED, "Cancelada"),
+        (VOIDED, "Inutilizada"),
+    ]
+
+    # Receptor contribuyente (con RUC) o no contribuyente (con cédula).
+    TAXPAYER = "taxpayer"
+    NON_TAXPAYER = "non_taxpayer"
+    CUSTOMER_KIND_CHOICES = [(TAXPAYER, "Contribuyente (RUC)"), (NON_TAXPAYER, "No contribuyente (cédula)")]
+
+    purchase_order = models.OneToOneField(
+        PurchaseOrder, on_delete=models.PROTECT, null=True, blank=True, related_name="invoice"
+    )
+    cash_transaction = models.OneToOneField(
+        CashTransaction, on_delete=models.PROTECT, null=True, blank=True, related_name="invoice"
+    )
+    requested_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="+"
+    )
+    is_simulated = models.BooleanField(default=False)
+
+    # Numeración: establecimiento, punto de expedición y número del documento.
+    stamp = models.CharField(max_length=8, blank=True, verbose_name="Timbrado")
+    establishment = models.CharField(max_length=3)
+    expedition_point = models.CharField(max_length=3)
+    number = models.CharField(max_length=7)
+
+    # Receptor, copiado al emitir: la factura no cambia si después cambian los datos del usuario.
+    customer_kind = models.CharField(max_length=12, choices=CUSTOMER_KIND_CHOICES)
+    customer_name = models.CharField(max_length=120)
+    customer_ruc = models.CharField(max_length=10, blank=True)
+    customer_dv = models.CharField(max_length=1, blank=True)
+    customer_document = models.CharField(max_length=12, blank=True, verbose_name="Cédula de identidad")
+    customer_email = models.EmailField()
+
+    description = models.CharField(max_length=200)
+    total = models.DecimalField(max_digits=18, decimal_places=0, help_text="Total en guaraníes.")
+    issued_at = models.DateTimeField(help_text="Fecha y hora de emisión que figura en el documento.")
+
+    status = models.CharField(max_length=12, choices=STATUS_CHOICES, default=PROCESSING)
+    cdc = models.CharField(max_length=44, blank=True, verbose_name="CDC")
+    error_message = models.TextField(blank=True)
+    sifen_status = models.CharField(max_length=40, blank=True)
+    sifen_detail = models.TextField(blank=True)
+    status_checked_at = models.DateTimeField(null=True, blank=True)
+    # El JSON enviado y la última respuesta, para auditoría y para depurar rechazos.
+    request_payload = models.JSONField(default=dict, blank=True)
+    response_payload = models.JSONField(default=dict, blank=True)
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        verbose_name = "factura electrónica"
+        verbose_name_plural = "facturas electrónicas"
+        constraints = [
+            models.UniqueConstraint(
+                fields=["is_simulated", "establishment", "expedition_point", "number"],
+                name="unique_invoice_number",
+            ),
+            models.CheckConstraint(
+                condition=(
+                    models.Q(purchase_order__isnull=False, cash_transaction__isnull=True)
+                    | models.Q(purchase_order__isnull=True, cash_transaction__isnull=False)
+                ),
+                name="invoice_has_exactly_one_operation",
+            ),
+        ]
+
+    def __str__(self):
+        return f"Factura {self.full_number} · {self.get_status_display()}"
+
+    @property
+    def full_number(self) -> str:
+        """Número completo como se imprime: ``001-003-0000314``."""
+        return f"{self.establishment}-{self.expedition_point}-{self.number}"
+
+    @property
+    def customer_tax_id(self) -> str:
+        if self.customer_kind == self.TAXPAYER:
+            return f"{self.customer_ruc}-{self.customer_dv}"
+        return self.customer_document
+
+    @property
+    def operation_label(self) -> str:
+        if self.purchase_order_id:
+            return f"Compra en línea #{self.purchase_order_id}"
+        return f"Operación de caja #{self.cash_transaction_id}"
+
+    @property
+    def can_download(self) -> bool:
+        """KuDE y XML existen en Factura Segura sólo para facturas reales ya generadas."""
+        return not self.is_simulated and bool(self.cdc)
+
+    @property
+    def can_retry(self) -> bool:
+        return self.status in (self.ERROR, self.UNCONFIRMED, self.REJECTED)
+
+    @property
+    def is_final(self) -> bool:
+        return self.status in (self.CANCELLED, self.VOIDED)

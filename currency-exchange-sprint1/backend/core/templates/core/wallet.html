@@ -237,7 +237,7 @@
               <tr>
                 <th>Fecha</th><th>Tipo</th><th>Divisa</th>
                 <th class="num">Cantidad</th><th class="num">Guaraníes</th>
-                <th class="num">Cotización</th><th>Pagado con</th>
+                <th class="num">Cotización</th><th>Pagado con</th><th>Operación</th>
               </tr>
             </thead>
             <tbody>
@@ -255,6 +255,15 @@
                   <td class="num">{{ tx.pyg_amount|gs }}</td>
                   <td class="num muted">{% if tx.rate_used %}{{ tx.rate_used|rate }}{% else %}—{% endif %}</td>
                   <td class="muted">{% if tx.payment_method %}{{ tx.payment_method.masked_number }}{% else %}Saldo{% endif %}</td>
+                  <td class="table-actions">
+                    {% if tx.purchase_order_id %}
+                      {# La compra y su venta de conversión llevan al mismo comprobante, donde se pide la factura. #}
+                      <a class="btn btn-secondary btn-sm" href="{% url 'purchase_checkout' tx.purchase_order_id %}">Compra #{{ tx.purchase_order_id }}</a>
+                      {% if tx.kind == 'buy' and tx.purchase_order.invoice %}
+                        <a class="btn btn-ghost btn-sm" href="{% url 'invoice_detail' tx.purchase_order.invoice.id %}">Factura</a>
+                      {% endif %}
+                    {% endif %}
+                  </td>
                 </tr>
               {% endfor %}
             </tbody>

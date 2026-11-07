@@ -1,0 +1,91 @@
+{% extends 'core/base.html' %}
+{% load money %}
+{% block title %}Exchange Pro | Facturas{% endblock %}
+{% block topbar_title %}Facturas electrónicas{% endblock %}
+{% block topbar_actions %}
+  {% if live %}
+    <span class="tag tag-up">Factura Segura · TEST</span>
+  {% else %}
+    <span class="tag tag-pink">Modo simulado</span>
+  {% endif %}
+{% endblock %}
+{% block content %}
+  <div class="stack-lg">
+    {% if not live %}
+      <p class="notice">
+        <span>
+          No hay token de Factura Segura configurado, así que las facturas se emiten en <strong>modo simulado</strong>:
+          se numeran y se pueden ver e imprimir, pero no se envían al SIFEN. Ver
+          <code>Documentacion/FACTURACION_ELECTRONICA.md</code>.
+        </span>
+      </p>
+    {% endif %}
+
+    <section class="card">
+      <div class="card-head row-between">
+        <h2 class="hexed">Facturas</h2>
+        <form method="get" class="form-inline">
+          <div class="field">
+            <label for="status-filter">Estado</label>
+            <select id="status-filter" name="status" onchange="this.form.submit()">
+              <option value="">Todos</option>
+              {% for value, label in status_choices %}
+                <option value="{{ value }}" {% if value == status_filter %}selected{% endif %}>{{ label }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <noscript><button class="btn btn-secondary btn-sm" type="submit">Filtrar</button></noscript>
+        </form>
+      </div>
+
+      {% if invoices %}
+        <div class="scroll-x">
+          <table>
+            <thead>
+              <tr>
+                <th>Número</th>
+                <th>Fecha</th>
+                <th>Cliente</th>
+                <th>Operación</th>
+                <th class="num">Total (Gs.)</th>
+                <th>Estado</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for invoice in invoices %}
+                <tr>
+                  <td>
+                    <code>{{ invoice.full_number }}</code>
+                    {% if invoice.is_simulated %}<span class="muted small">simulada</span>{% endif %}
+                  </td>
+                  <td>{{ invoice.issued_at|date:"d/m/Y H:i" }}</td>
+                  <td>
+                    <span class="coin-name">
+                      <span>{{ invoice.customer_name }}</span>
+                      <span class="coin-full">{% if invoice.customer_kind == 'taxpayer' %}RUC{% else %}C.I.{% endif %} {{ invoice.customer_tax_id }}</span>
+                    </span>
+                  </td>
+                  <td>{{ invoice.operation_label }}</td>
+                  <td class="num">{{ invoice.total|gs }}</td>
+                  <td>{% include 'core/_invoice_status.html' %}</td>
+                  <td class="table-actions">
+                    <a class="btn btn-secondary btn-sm" href="{% url 'invoice_detail' invoice.id %}">Ver</a>
+                    {% if invoice.can_download %}
+                      <a class="btn btn-ghost btn-sm" href="{% url 'invoice_kude' invoice.id %}">PDF</a>
+                    {% endif %}
+                  </td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      {% else %}
+        <p class="muted">
+          {% if status_filter %}No hay facturas con ese estado.{% else %}Todavía no hay facturas.
+          Se solicitan desde el comprobante de una compra pagada o de una operación de caja.{% endif %}
+        </p>
+      {% endif %}
+    </section>
+  </div>
+{% endblock %}

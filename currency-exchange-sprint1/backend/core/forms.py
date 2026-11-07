@@ -4,9 +4,11 @@ from decimal import Decimal
 from django import forms
 from django.db.models import Q
 
-from .models import BASE_CURRENCY_CODE, CashTransaction, Currency, PaymentMethod, cash_quantum
+from .models import BASE_CURRENCY_CODE, CashTransaction, Currency, Invoice, PaymentMethod, cash_quantum
 from .roles import ALL_ROLES, DEFAULT_ROLE, ROLE_LABELS
 from .services import pricing
+from .services.factura_segura import check_digit
+from .services.invoicing import Customer
 
 _ROLE_CHOICES = [(role, ROLE_LABELS[role]) for role in ALL_ROLES]
 
@@ -591,3 +593,48 @@ class CashPaymentForm(forms.Form):
         if errors:
             return None
         return {"card_brand": brand, "card_holder": holder, "card_last4": digits[-4:]}
+
+
+class InvoiceCustomerForm(forms.Form):
+    """Datos del receptor de una factura electrónica.
+
+    En ``tax_id`` se escribe el RUC con su dígito verificador (``1234567-8``) si el
+    cliente es contribuyente, o sólo el número de cédula si no lo es. El dígito
+    verificador se comprueba con el algoritmo módulo 11 de la DNIT.
+    """
+
+    customer_name = forms.CharField(label="Nombre o razón social", max_length=120)
+    tax_id = forms.CharField(
+        label="RUC o cédula",
+        max_length=15,
+        help_text="RUC con guion y dígito verificador (1234567-8), o sólo el número de cédula.",
+        widget=forms.TextInput(attrs={"placeholder": "1234567-8", "autocomplete": "off"}),
+    )
+    customer_email = forms.EmailField(
+        label="Correo electrónico",
+        help_text="Factura Segura envía ahí el KuDE y el XML cuando el SIFEN aprueba la factura.",
+    )
+
+    def clean_customer_name(self):
+        name = " ".join(self.cleaned_data["customer_name"].split())
+        if len(name) < 3:
+            raise forms.ValidationError("Escribí el nombre completo o la razón social.")
+        return name
+
+    def clean_tax_id(self):
+        raw = self.cleaned_data["tax_id"].strip().replace(".", "").replace(" ", "")
+        if "-" in raw:
+            ruc, _, dv = raw.partition("-")
+            if not (ruc.isdigit() and 1 <= len(ruc) <= 8 and dv.isdigit() and len(dv) == 1):
+                raise forms.ValidationError("Escribí el RUC como 1234567-8.")
+            if check_digit(ruc) != int(dv):
+                raise forms.ValidationError(f"El dígito verificador de ese RUC es {check_digit(ruc)}, no {dv}.")
+            return {"kind": Invoice.TAXPAYER, "ruc": ruc, "dv": dv}
+        if not raw.isdigit() or not 5 <= len(raw) <= 9:
+            raise forms.ValidationError("La cédula debe tener entre 5 y 9 dígitos (o escribí el RUC con su guion).")
+        return {"kind": Invoice.NON_TAXPAYER, "document": raw}
+
+    def customer(self) -> Customer:
+        """El receptor validado, listo para ``services.invoicing``."""
+        data = self.cleaned_data
+        return Customer(name=data["customer_name"], email=data["customer_email"], **data["tax_id"])

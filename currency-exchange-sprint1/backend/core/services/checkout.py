@@ -6,6 +6,7 @@ Comprar es un proceso de dos pasos:
    escribe cuánto paga o cuánto recibe (el otro monto se completa solo). Se crea
    una ``PurchaseOrder`` pendiente con las cotizaciones **congeladas** en ese
    momento y con un plazo de ``PURCHASE_TIMEOUT`` (5 minutos) para pagarla.
+   
 2. ``confirm_order()`` — el usuario elige cómo pagar y confirma. Se usan las
    cotizaciones congeladas aunque la pizarra haya cambiado mientras tanto.
 
@@ -17,6 +18,9 @@ Medios de pago (cada uno es una ``PaymentOption`` con una clave estable):
   la compra; queda registrada como una venta más la compra.
 * ``card:<id>``      — una tarjeta registrada (cobro simulado).
 * ``qr``             — un código QR de pago (simulado: no se cobra nada real).
+* ``stripe``         — tarjeta cobrada por Stripe Checkout. No se confirma acá:
+  el usuario paga en la página de Stripe y el webhook llama a
+  ``settle_stripe_payment()`` cuando Stripe avisa que el cobro se hizo.
 
 Toda operación que mueve saldo bloquea la orden y la billetera con
 ``select_for_update`` para que dos confirmaciones simultáneas (doble clic, dos
@@ -27,6 +31,7 @@ import secrets
 from dataclasses import dataclass
 from decimal import ROUND_UP, Decimal
 
+from django.conf import settings
 from django.db import transaction
 from django.utils import timezone
 
@@ -47,6 +52,7 @@ from . import pricing
 
 BALANCE_KEY = "balance"
 QR_KEY = "qr"
+STRIPE_KEY = "stripe"
 CURRENCY_KEY_PREFIX = "currency:"
 CARD_KEY_PREFIX = "card:"
 
@@ -70,8 +76,6 @@ class PaymentOption:
     amount: Decimal | None = None  # cuánto se debita, en la divisa del medio de pago
     rate: Decimal | None = None  # cotización congelada usada para la conversión
 
-
-# Mismo formato paraguayo que los filtros de plantilla (punto de miles, coma decimal).
 _gs = guarani
 _units = units
 
@@ -237,6 +241,17 @@ def payment_options(order: PurchaseOrder, wallet: Wallet) -> list[PaymentOption]
             )
         )
 
+    if settings.STRIPE_SECRET_KEY:
+        options.append(
+            PaymentOption(
+                key=STRIPE_KEY,
+                kind=PurchaseOrder.PAY_STRIPE,
+                title="Tarjeta (Stripe)",
+                detail="Pagás con tu tarjeta en la página segura de Stripe y volvés acá.",
+                amount=order.pyg_amount,
+            )
+        )
+
     options.append(
         PaymentOption(
             key=QR_KEY,
@@ -277,6 +292,9 @@ def confirm_order(order_id: int, wallet: Wallet, source_key: str) -> PurchaseOrd
                 raise CheckoutError("Elegí un medio de pago válido.")
             if not option.available:
                 raise CheckoutError(option.reason)
+            if option.kind == PurchaseOrder.PAY_STRIPE:
+                # El cobro lo hace Stripe y lo confirma el webhook, nunca el navegador.
+                raise CheckoutError("El pago con Stripe se completa en la página de Stripe.")
             _settle(order, wallet, option)
 
     if expired:
@@ -306,10 +324,13 @@ def _settle(order: PurchaseOrder, wallet: Wallet, option: PaymentOption) -> None
             pyg_amount=order.pyg_amount,
             rate_used=option.rate,
             note=f"Conversión para pagar la compra #{order.pk}",
+            purchase_order=order,
         )
         note = f"{tag} pagada con {_units(option.amount)} {option.currency.code}"
     elif option.kind == PurchaseOrder.PAY_CARD:
         note = f"{tag} con {option.card.masked_number}"
+    elif option.kind == PurchaseOrder.PAY_STRIPE:
+        note = f"{tag} con tarjeta por Stripe"
     else:
         note = f"{tag} con QR {order.qr_reference}"
 
@@ -325,6 +346,7 @@ def _settle(order: PurchaseOrder, wallet: Wallet, option: PaymentOption) -> None
         pyg_amount=order.pyg_amount,
         rate_used=order.rate,
         note=note,
+        purchase_order=order,
     )
 
     order.status = PurchaseOrder.COMPLETED
@@ -336,6 +358,69 @@ def _settle(order: PurchaseOrder, wallet: Wallet, option: PaymentOption) -> None
     order.save(
         update_fields=["status", "payment_kind", "payment_method", "paid_currency", "paid_amount", "closed_at"]
     )
+
+
+def settle_stripe_payment(order: PurchaseOrder, wallet: Wallet, payment_intent: str = "") -> None:
+    """Cierra como pagada una orden que Stripe ya cobró.
+
+    Lo llama el webhook, que es quien bloquea ``order`` y ``wallet`` con
+    ``select_for_update`` dentro de su propia transacción. Acredita la divisa
+    comprada y registra el movimiento igual que cualquier otro medio de pago.
+    """
+    option = PaymentOption(
+        key=STRIPE_KEY,
+        kind=PurchaseOrder.PAY_STRIPE,
+        title="Tarjeta (Stripe)",
+        detail="",
+        amount=order.pyg_amount,
+    )
+    _settle(order, wallet, option)
+    order.stripe_payment_intent = payment_intent
+    order.save(update_fields=["stripe_payment_intent"])
+
+
+def deposit(wallet: Wallet, amount: Decimal, card: PaymentMethod, note: str) -> WalletTransaction:
+    """Carga ``amount`` guaraníes al saldo cobrando ``card`` (cobro simulado)."""
+    with transaction.atomic():
+        wallet.pyg_balance += amount
+        wallet.save(update_fields=["pyg_balance", "updated_at"])
+        return WalletTransaction.objects.create(
+            wallet=wallet,
+            kind=WalletTransaction.DEPOSIT,
+            payment_method=card,
+            amount=amount,
+            pyg_amount=amount,
+            note=note,
+        )
+
+
+def sell_currency(wallet: Wallet, currency: Currency, amount: Decimal) -> WalletTransaction:
+    """Vende ``amount`` de ``currency`` al precio de **compra** y acredita los guaraníes.
+
+    La venta no pasa por la pantalla de pago: la casa de cambio paga en el acto,
+    con la cotización de la pizarra. Bloquea la tenencia y la billetera.
+    """
+    with transaction.atomic():
+        holding = wallet.holdings.select_for_update().filter(currency=currency).first()
+        if not holding or holding.amount < amount:
+            raise CheckoutError(f"No tienes suficiente {currency.code} para vender esa cantidad.")
+        rate = currency.buy_rate
+        pyg_amount = quantize_pyg(amount * rate)
+        holding.amount -= amount
+        holding.save(update_fields=["amount"])
+        locked = Wallet.objects.select_for_update().get(pk=wallet.pk)
+        locked.pyg_balance += pyg_amount
+        locked.save(update_fields=["pyg_balance", "updated_at"])
+        wallet.pyg_balance = locked.pyg_balance
+        return WalletTransaction.objects.create(
+            wallet=wallet,
+            kind=WalletTransaction.SELL,
+            currency=currency,
+            amount=amount,
+            pyg_amount=pyg_amount,
+            rate_used=rate,
+            note="Venta de divisa",
+        )
 
 
 def cancel_order(order_id: int, wallet: Wallet) -> PurchaseOrder:

@@ -1,6 +1,6 @@
 from django.contrib import admin
 from django.urls import include, path
-from core import cashier_views, views
+from core import cashier_views, invoice_views, views
 
 urlpatterns = [
     path("django-admin/", admin.site.urls),
@@ -11,6 +11,8 @@ urlpatterns = [
     path("trade/checkout/<int:order_id>/", views.purchase_checkout, name="purchase_checkout"),
     path("trade/checkout/<int:order_id>/confirm/", views.purchase_confirm, name="purchase_confirm"),
     path("trade/checkout/<int:order_id>/cancel/", views.purchase_cancel, name="purchase_cancel"),
+    path("trade/checkout/<int:order_id>/factura/", invoice_views.order_invoice, name="order_invoice"),
+    path("stripe/webhook/", views.stripe_webhook, name="stripe_webhook"),
     path("wallet/", views.wallet_view, name="wallet"),
     path("wallet/deposit/", views.wallet_deposit, name="wallet_deposit"),
     path("wallet/deposit/test/", views.wallet_deposit_test, name="wallet_deposit_test"),
@@ -25,9 +27,18 @@ urlpatterns = [
     path("caja/operaciones/<int:tx_id>/", cashier_views.cash_operation, name="cash_operation"),
     path("caja/operaciones/<int:tx_id>/confirmar/", cashier_views.cash_operation_confirm, name="cash_operation_confirm"),
     path("caja/operaciones/<int:tx_id>/cancelar/", cashier_views.cash_operation_cancel, name="cash_operation_cancel"),
+    path("caja/operaciones/<int:tx_id>/factura/", invoice_views.cash_invoice, name="cash_invoice"),
     path("caja/sesiones/<int:session_id>/", cashier_views.cash_session_report, name="cash_session_report"),
     path("caja/sesiones/<int:session_id>/csv/", cashier_views.cash_session_report_csv, name="cash_session_report_csv"),
+    path("facturas/", invoice_views.invoice_list, name="invoice_list"),
+    path("facturas/<int:invoice_id>/", invoice_views.invoice_detail, name="invoice_detail"),
+    path("facturas/<int:invoice_id>/estado/", invoice_views.invoice_refresh, name="invoice_refresh"),
+    path("facturas/<int:invoice_id>/reintentar/", invoice_views.invoice_retry, name="invoice_retry"),
+    path("facturas/<int:invoice_id>/cancelar/", invoice_views.invoice_cancel, name="invoice_cancel"),
+    path("facturas/<int:invoice_id>/kude/", invoice_views.invoice_kude, name="invoice_kude"),
+    path("facturas/<int:invoice_id>/xml/", invoice_views.invoice_xml, name="invoice_xml"),
     path("history/", views.currency_history, name="currency_history"),
+    path("notifications/", views.notifications, name="notifications"),
     path("currencies/", views.currency_management, name="currency_management"),
     path("currencies/new/", views.currency_create, name="currency_create"),
     path("currencies/<int:currency_id>/edit/", views.currency_edit, name="currency_edit"),
@@ -35,6 +46,7 @@ urlpatterns = [
     path("simulation/", views.simulation_panel, name="simulation"),
     path("simulation/advance-day/", views.simulation_advance_day, name="simulation_advance_day"),
     path("simulation/advance-week/", views.simulation_advance_week, name="simulation_advance_week"),
+    path("simulation/transactions/", views.simulation_transactions, name="simulation_transactions"),
     path("manage/users/", views.admin_users, name="admin_users"),
     path("manage/users/new/", views.admin_user_create, name="admin_user_create"),
     path("manage/users/<str:user_id>/roles/", views.admin_user_roles, name="admin_user_roles"),

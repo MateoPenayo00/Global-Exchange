@@ -43,12 +43,22 @@
               <a class="nav-item {% if request.path == '/trade/' %}is-active{% endif %}" href="{% url 'trade' %}">
                 <span class="nav-hex" aria-hidden="true"></span>Comprar y vender
               </a>
+              <a class="nav-item {% if request.path == '/notifications/' %}is-active{% endif %}" href="{% url 'notifications' %}">
+                <span class="nav-hex" aria-hidden="true"></span>Avisos
+                {% if unread_notifications %}<span class="tag tag-pink">{{ unread_notifications }}</span>{% endif %}
+              </a>
             {% endif %}
 
             {% if can_operate_cash %}
               <p class="nav-group">Ventanilla</p>
               <a class="nav-item {% if '/caja/' in request.path %}is-active{% endif %}" href="{% url 'cash_desk' %}">
                 <span class="nav-hex" aria-hidden="true"></span>Caja
+              </a>
+            {% endif %}
+
+            {% if can_view_invoices %}
+              <a class="nav-item {% if '/facturas/' in request.path %}is-active{% endif %}" href="{% url 'invoice_list' %}">
+                <span class="nav-hex" aria-hidden="true"></span>Facturas
               </a>
             {% endif %}
 

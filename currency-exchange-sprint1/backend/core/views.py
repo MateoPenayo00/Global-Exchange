@@ -10,9 +10,11 @@ from django.contrib.auth import logout
 from django.core.exceptions import PermissionDenied
 from django.db import transaction
 from django.db.models import ProtectedError
-from django.http import Http404
+from django.http import Http404, HttpResponse
 from django.shortcuts import get_object_or_404, render, redirect
 from django.urls import reverse
+from django.views.decorators.csrf import csrf_exempt
+from django.views.decorators.http import require_POST
 
 from . import roles as role_lib
 from .forms import (
@@ -40,12 +42,14 @@ from .models import (
     quantize_pyg,
 )
 from .roles import ROLE_LABELS
-from .services import checkout, pricing
+from .services import cashier, checkout, pricing, stripe_payments
+from .services.demo import simulate_transactions
 from .services.charts import build_rate_chart
 from .services.keycloak_admin import KeycloakAdminClient, KeycloakAdminError
 from .services.qr import mock_qr_path
 from .templatetags.money import guarani, units
 from .services.simulation import MAX_DAILY_CHANGE, MIN_DAILY_CHANGE, advance_days
+from .services.notifications import mark_read, notify_rate_change
 
 # Montos fijos de los botones de prueba de un clic, expresados en guaraníes.
 TEST_DEPOSIT_AMOUNT = Decimal("500000.00")
@@ -135,7 +139,9 @@ def wallet_view(request):
             "test_deposit_amount": TEST_DEPOSIT_AMOUNT,
             "test_withdraw_amount": TEST_WITHDRAW_AMOUNT,
             "deposit_presets": DEPOSIT_PRESETS,
-            "transactions": wallet.transactions.select_related("currency", "payment_method")[:20],
+            "transactions": wallet.transactions.select_related(
+                "currency", "payment_method", "purchase_order__invoice"
+            )[:20],
         }
     )
     return render(request, "core/wallet.html", context)
@@ -212,17 +218,7 @@ def wallet_deposit_test(request):
 
 def _credit_balance(wallet, amount, card, note):
     """Suma guaraníes al saldo y deja el movimiento registrado."""
-    with transaction.atomic():
-        wallet.pyg_balance += amount
-        wallet.save(update_fields=["pyg_balance", "updated_at"])
-        WalletTransaction.objects.create(
-            wallet=wallet,
-            kind=WalletTransaction.DEPOSIT,
-            payment_method=card,
-            amount=amount,
-            pyg_amount=amount,
-            note=note,
-        )
+    checkout.deposit(wallet, amount, card, note)
 
 
 @role_required(role_lib.USER)
@@ -360,35 +356,17 @@ def _process_sell(request, wallet, form) -> bool:
     """Ejecuta una venta de divisa hacia guaraníes. Devuelve ``True`` si se concretó."""
     currency = form.cleaned_data["currency"]
     amount = form.cleaned_data["amount"]
-    holding = wallet.holdings.filter(currency=currency).first()
-
-    if not holding or holding.amount < amount:
-        messages.error(request, f"No tienes suficiente {currency.code} para vender esa cantidad.")
+    try:
+        # Se vende al precio de compra de la divisa: es lo que paga la casa de cambio.
+        sale = checkout.sell_currency(wallet, currency, amount)
+    except checkout.CheckoutError as exc:
+        messages.error(request, str(exc))
         return False
-
-    # Se vende al precio de compra de la divisa: es lo que paga la casa de cambio.
-    rate = currency.buy_rate
-    pyg_amount = quantize_pyg(amount * rate)
-
-    with transaction.atomic():
-        holding.amount -= amount
-        holding.save(update_fields=["amount"])
-        wallet.pyg_balance += pyg_amount
-        wallet.save(update_fields=["pyg_balance", "updated_at"])
-        WalletTransaction.objects.create(
-            wallet=wallet,
-            kind=WalletTransaction.SELL,
-            currency=currency,
-            amount=amount,
-            pyg_amount=pyg_amount,
-            rate_used=rate,
-            note="Venta de divisa",
-        )
 
     messages.success(
         request,
-        f"Vendiste {amount} {currency.code} y recibiste Gs. {pyg_amount:,.0f} "
-        f"(precio de compra Gs. {rate:,.0f}).".replace(",", "."),
+        f"Vendiste {amount} {currency.code} y recibiste Gs. {sale.pyg_amount:,.0f} "
+        f"(precio de compra Gs. {sale.rate_used:,.0f}).".replace(",", "."),
     )
     return True
 
@@ -413,6 +391,14 @@ def purchase_checkout(request, order_id):
     wallet, order = _own_order(request, order_id)
     if checkout.expire_due_orders(wallet):
         order.refresh_from_db()
+
+    # Al volver de Stripe el navegador trae ?stripe=success|cancel. Que haya vuelto
+    # no significa que se cobró: eso lo confirma el webhook.
+    stripe_return = request.GET.get("stripe")
+    if stripe_return == "success" and order.is_pending:
+        messages.info(request, "Recibimos tu pago. Estamos confirmándolo con Stripe; actualizá esta página en unos segundos.")
+    elif stripe_return == "cancel" and order.is_pending:
+        messages.warning(request, "Cancelaste el pago en Stripe. No se cobró nada; podés elegir otro medio de pago.")
 
     context = _nav_context(request)
     context.update({"order": order, "wallet": wallet})
@@ -450,6 +436,8 @@ def purchase_confirm(request, order_id):
         return redirect("purchase_checkout", order_id=order_id)
     wallet, order = _own_order(request, order_id)
     source_key = request.POST.get("payment_source", "")
+    if source_key == checkout.STRIPE_KEY:
+        return _start_stripe_payment(request, wallet, order)
     try:
         order = checkout.confirm_order(order.id, wallet, source_key)
     except PurchaseOrder.DoesNotExist:
@@ -464,7 +452,48 @@ def purchase_confirm(request, order_id):
         f"Compraste {units(order.currency_amount)} {order.currency.code} por Gs. {guarani(order.pyg_amount)} "
         f"(precio de venta congelado Gs. {guarani(order.rate)}).",
     )
-    return redirect("trade")
+    return redirect("purchase_checkout", order_id=order.id)
+
+
+def _start_stripe_payment(request, wallet, order):
+    """Abre la sesión de Stripe de ``order`` y lleva al usuario a pagar allí."""
+    checkout_url = reverse("purchase_checkout", args=[order.id])
+    stripe_choice = urlencode({"pay": checkout.STRIPE_KEY})
+
+    if checkout.expire_due_orders(wallet):
+        order.refresh_from_db()
+    if not order.is_pending:
+        messages.error(request, f"Esta compra ya está {order.get_status_display().lower()}.")
+        return redirect(checkout_url)
+
+    try:
+        pay_url = stripe_payments.create_checkout_session(
+            order,
+            success_url=request.build_absolute_uri(f"{checkout_url}?stripe=success"),
+            cancel_url=request.build_absolute_uri(f"{checkout_url}?stripe=cancel&{stripe_choice}"),
+        )
+    except stripe_payments.StripeError as exc:
+        messages.error(request, str(exc))
+        return redirect(f"{checkout_url}?{stripe_choice}")
+    return redirect(pay_url)
+
+
+@csrf_exempt
+@require_POST
+def stripe_webhook(request):
+    """Recibe los avisos de Stripe. Sólo se acepta lo que trae una firma válida.
+
+    No tiene sesión de usuario ni CSRF (lo llama Stripe, no un navegador): la
+    firma ``Stripe-Signature`` es la que prueba que el aviso es genuino.
+    """
+    if not stripe_payments.is_enabled() or not settings.STRIPE_WEBHOOK_SECRET:
+        return HttpResponse(status=503)
+    try:
+        event = stripe_payments.parse_event(request.body, request.META.get("HTTP_STRIPE_SIGNATURE", ""))
+    except stripe_payments.InvalidWebhook:
+        return HttpResponse(status=400)
+    stripe_payments.handle_event(event)
+    return HttpResponse(status=200)
 
 
 @role_required(role_lib.USER)
@@ -484,6 +513,25 @@ def purchase_cancel(request, order_id):
     else:
         messages.success(request, f"Cancelaste la compra #{order.id}. No se cobró nada.")
     return redirect("trade")
+
+
+# --- Notificaciones por cambio de cotización -----------------------------
+
+
+@role_required(role_lib.USER)
+def notifications(request):
+    """Avisos de cambio de cotización del usuario, del más nuevo al más viejo.
+
+    Un ``POST`` los marca como leídos: uno si trae ``id`` y todos si no lo trae.
+    Sólo se tocan los avisos del propio usuario.
+    """
+    if request.method == "POST":
+        mark_read(request.user, request.POST.get("id"))
+        return redirect("notifications")
+
+    context = _nav_context(request)
+    context["notifications"] = request.user.notifications.select_related("currency")[:100]
+    return render(request, "core/notifications.html", context)
 
 
 # --- Historial de cotizaciones ------------------------------------------
@@ -574,6 +622,8 @@ def currency_create(request):
 @role_required(role_lib.ADMIN, role_lib.MANAGER)
 def currency_edit(request, currency_id):
     currency = get_object_or_404(Currency, pk=currency_id)
+    # Se guardan las cotizaciones de antes porque form.is_valid() ya modifica ``currency``.
+    previous_rates = (currency.buy_rate, currency.sell_rate)
     if request.method == "POST":
         form = CurrencyForm(request.POST, instance=currency)
         if currency.is_base:
@@ -583,6 +633,7 @@ def currency_edit(request, currency_id):
         if form.is_valid():
             currency = form.save()
             currency.record_rate(on_date=_simulated_today())
+            notify_rate_change(currency, *previous_rates)
             messages.success(request, f"Divisa {currency.code} actualizada.")
             return redirect("currency_management")
     else:
@@ -637,6 +688,7 @@ def simulation_panel(request):
             "max_change_percent": (MAX_DAILY_CHANGE * Decimal("100")).quantize(Decimal("0.1")),
             "last_changes": request.session.pop("last_simulation_changes", None),
             "last_simulation_days": request.session.pop("last_simulation_days", None),
+            "last_transactions": request.session.pop("last_transaction_simulation", None),
         }
     )
     return render(request, "core/simulation.html", context)
@@ -654,11 +706,36 @@ def simulation_advance_week(request):
     return _advance(request, 7)
 
 
+@role_required(role_lib.ADMIN)
+def simulation_transactions(request):
+    """Simulación completa de transacciones: una ronda en línea y otra en la caja.
+
+    Recorre todos los medios de pago, una cancelación, un vencimiento, una venta,
+    las operaciones de ventanilla con su cierre y las facturas (simuladas).
+    """
+    if request.method != "POST":
+        return redirect("simulation")
+    try:
+        report = simulate_transactions()
+    except (checkout.CheckoutError, cashier.CashierError) as exc:
+        messages.error(request, f"No se pudo simular: {exc}")
+        return redirect("simulation")
+    request.session["last_transaction_simulation"] = report.as_dicts()
+    failures = f", {report.failures} con error" if report.failures else ""
+    messages.success(
+        request, f"Simulación completa: {len(report.steps)} pasos y {report.invoices} facturas{failures}."
+    )
+    return redirect("simulation")
+
+
 def _advance(request, days):
     if request.method != "POST":
         return redirect("simulation")
 
     state, changes = advance_days(days)
+    # Un aviso por divisa con el cambio neto, aunque se hayan adelantado varios días.
+    for change in changes:
+        notify_rate_change(change.currency, change.previous_buy, change.previous_sell)
     # Se guarda un resumen en la sesión para mostrarlo después del redirect.
     request.session["last_simulation_changes"] = [
         {
